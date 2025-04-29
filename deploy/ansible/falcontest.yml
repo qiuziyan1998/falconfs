@@ -1,0 +1,224 @@
+---
+- name: Install dependencies
+  gather_facts: yes
+  hosts: falconall
+  tags: install-deps
+  vars:
+    unique_hosts: "{{ play_hosts | map('extract', hostvars) | groupby('ansible_host') | map('last') | map('first') | map(attribute='inventory_hostname') | list }}"
+  tasks:
+    - name: Allow Write To /etc/sudoers
+      become: yes
+      become_method: sudo
+      file:
+        path: /etc/sudoers
+        mode: "u+w"
+      when: inventory_hostname in unique_hosts
+    - name: Allow Sudo With No Password
+      become: yes
+      become_method: sudo
+      lineinfile:
+        dest: /etc/sudoers
+        regexp: "^{{ ansible_user }}"
+        line: "{{ ansible_user }} ALL=(ALL:ALL) NOPASSWD: ALL"
+      when: inventory_hostname in unique_hosts
+    - name: Copy install script to remote
+      copy:
+        src: "{{ item }}"
+        dest: "{{ ansible_user_dir }}/{{ item | basename }}"
+        mode: 0755
+      loop: "{{ lookup('fileglob', './*.sh').split(',') }}"
+    - name: Run installation dependencies script for Ubuntu
+      become: yes
+      become_method: sudo
+      shell: "{{ './install-ubuntu24.04.sh' if ansible_distribution_version is version_compare('24.04', '==') else './install-ubuntu22.04.sh' }}"
+      args:
+        chdir: "{{ ansible_user_dir }}"
+      when:
+        - inventory_hostname in unique_hosts
+        - ansible_distribution == "Ubuntu"
+        - ansible_distribution_version is version_compare('24.04', '==') or ansible_distribution_version is version_compare('22.04', '==')
+    - name: Set Environment Variables In ~/.bashrc
+      lineinfile:
+        dest: ~/.bashrc
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - regexp: '^export LD_LIBRARY_PATH='
+          line: "export LD_LIBRARY_PATH={{ extra_ld_library_path }}:$LD_LIBRARY_PATH"
+        - regexp: '^export PATH='
+          line: "export PATH={{ extra_path }}:$PATH"
+      when: inventory_hostname in unique_hosts
+
+
+- name: Clone Code and Build
+  gather_facts: yes
+  hosts: falconall
+  tags: build
+  vars:
+    unique_hosts: "{{ play_hosts | map('extract', hostvars) | groupby('ansible_host') | map('last') | map('first') | map(attribute='inventory_hostname') | list }}"
+  tasks:
+    - name: Ensure parent directory exists
+      file:
+        path: "{{ remote_src_dir | dirname }}"
+        state: directory
+        mode: 0755
+    - name: Clone Code
+      git:
+        repo: "{{ falcon_repo_url }}"
+        version: "{{ falcon_repo_version }}"
+        dest: "{{ remote_src_dir }}"
+        update: yes
+        force: yes
+        recursive: yes
+      when: inventory_hostname in unique_hosts
+    - name: Apply Patch
+      shell: ./patches/apply.sh
+      args:
+        chdir: "{{ remote_src_dir }}"
+      when: inventory_hostname in unique_hosts
+    - name: Build and install
+      shell: ./build.sh && ./build.sh install
+      args:
+        chdir: "{{ remote_src_dir }}"
+      environment:
+        LD_LIBRARY_PATH: "{{ extra_ld_library_path }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+        PATH: "{{ extra_path }}:{{ ansible_env.PATH | default('') }}"
+      when: inventory_hostname in unique_hosts
+
+
+- name: Start metadata server
+  gather_facts: yes
+  hosts: falconmeta
+  tags: start
+  vars:
+    cn_localip: "{{ groups.falconcn | map('extract', hostvars, 'localip') | join(' ') }}"
+    dn_localip: "{{ groups.falcondn | map('extract', hostvars, 'localip') | map('regex_replace', '^(.*)$', \"'\\1'\") | join(' ') }}"
+    dn_worker_num: "{{ groups.falcondn | map('regex_replace', '^.*$', '1') | join(' ') }}"
+  tasks:
+    - name: Set Metadata Configuration
+      lineinfile:
+        dest: "{{ item.dest }}"
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backrefs: yes
+      loop:
+        - dest: "{{ remote_src_dir }}/deploy/meta/falcon_meta_config.sh"
+          regexp: '^localIp='
+          line: "localIp='{{ localip }}'"
+        - dest: "{{ remote_src_dir }}/deploy/meta/falcon_meta_config.sh"
+          regexp: '^cnIp='
+          line: "cnIp='{{ cn_localip }}'"
+        - dest: "{{ remote_src_dir }}/deploy/meta/falcon_meta_config.sh"
+          regexp: '^workerIpList='
+          line: "workerIpList=({{ dn_localip }})"
+        - dest: "{{ remote_src_dir }}/deploy/meta/falcon_meta_config.sh"
+          regexp: '^workerNumList='
+          line: "workerNumList=({{ dn_worker_num }})"
+        - dest: "{{ remote_src_dir }}/deploy/meta/falcon_meta_config.sh"
+          regexp: '^uniquePortPrefix='
+          line: "uniquePortPrefix={{ falcon_server_port_prefix }}"
+      when: inventory_hostname in groups['falconmeta']
+    - name: Start Dn
+      shell: /bin/bash -c ". ./falcon_env.sh && ./meta/falcon_meta_start.sh"
+      args:
+        chdir: "{{ [remote_src_dir, 'deploy'] | path_join }}"
+      environment:
+        LD_LIBRARY_PATH: "{{ extra_ld_library_path }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+        PATH: "{{ extra_path }}:{{ ansible_env.PATH | default('') }}"
+      when: inventory_hostname in groups['falcondn']
+    - name: Start Cn
+      shell: /bin/bash -c ". ./falcon_env.sh && ./meta/falcon_meta_start.sh"
+      args:
+        chdir: "{{ [remote_src_dir, 'deploy'] | path_join }}"
+      environment:
+        LD_LIBRARY_PATH: "{{ extra_ld_library_path }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+        PATH: "{{ extra_path }}:{{ ansible_env.PATH | default('') }}"
+      when: inventory_hostname in groups['falconcn']
+
+- name: Start client
+  gather_facts: yes
+  hosts: falconclient
+  tags: start
+  vars:
+    cn_server_ip: "{{ groups.falconcn | map('extract', hostvars, 'localip') | join(' ') }}"
+    all_client_ips_ports: "{{ groups.falconclient | map('extract', hostvars, 'localip') | map('regex_replace', '$', ':' ~ falcon_client_port) | map('regex_replace', '^(.*)$', '\"\\1\"') | join(', ') }}"
+  tasks:
+    - name: Get node id
+      set_fact:
+        node_id: "{{ play_hosts.index(inventory_hostname) }}"
+    - name: Set Client Configuration
+      lineinfile:
+        dest: "{{ item.dest }}"
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+        backrefs: yes
+      loop:
+        - dest: "{{ remote_src_dir }}/config/config.json"
+          regexp: '^        "falcon_log_dir": '
+          line: "        \"falcon_log_dir\": \"{{ falcon_client_log_path }}\","
+        - dest: "{{ remote_src_dir }}/config/config.json"
+          regexp: '^        "falcon_cache_root": '
+          line: "        \"falcon_cache_root\": \"{{ falcon_client_cache_path }}_{{ ansible_user }}\","
+        - dest: "{{ remote_src_dir }}/config/config.json"
+          regexp: '^        "falcon_server_ip": '
+          line: "        \"falcon_server_ip\": \"{{ cn_server_ip }}\","
+        - dest: "{{ remote_src_dir }}/config/config.json"
+          regexp: '^        "falcon_server_port": '
+          line: "        \"falcon_server_port\": \"{{ falcon_server_port_prefix }}10\","
+        - dest: "{{ remote_src_dir }}/config/config.json"
+          regexp: '^        "falcon_node_id": '
+          line: "        \"falcon_node_id\": {{ node_id }},"
+        - dest: "{{ remote_src_dir }}/config/config.json"
+          regexp: '^        "falcon_cluster_view": '
+          line: "        \"falcon_cluster_view\": [{{ all_client_ips_ports }}],"
+        - dest: "{{ remote_src_dir }}/config/config.json"
+          regexp: '^        "falcon_mount_path": '
+          line: "        \"falcon_mount_path\": \"{{ mount_path }}\","
+        - dest: "{{ remote_src_dir }}/deploy/client/falcon_client_config.sh"
+          regexp: '^CACHE_PATH='
+          line: "CACHE_PATH=/tmp/falcon_cache_{{ ansible_user }}"
+        - dest: "{{ remote_src_dir }}/deploy/client/falcon_client_config.sh"
+          regexp: '^MNT_PATH='
+          line: "MNT_PATH={{ mount_path }}"
+        - dest: "{{ remote_src_dir }}/deploy/client/falcon_client_start.sh"
+          regexp: '-rpc_endpoint="0\.0\.0\.0:\d+"'
+          line: '-rpc_endpoint="0.0.0.0:{{ falcon_client_port }}"'
+    - name: Start client
+      shell: /bin/bash -c ". ./falcon_env.sh && ./client/falcon_client_start.sh"
+      args:
+        chdir: "{{ [remote_src_dir, 'deploy'] | path_join }}"
+      environment:
+        LD_LIBRARY_PATH: "{{ extra_ld_library_path }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+        PATH: "{{ extra_path }}:{{ ansible_env.PATH | default('') }}"
+        CONFIG_FILE: "{{ remote_src_dir }}/config/config.json"
+
+
+- name: Stop metadata and client
+  gather_facts: yes
+  hosts: falconall
+  tags: stop
+  tasks:
+    - name: Stop Client
+      shell: /bin/bash -c ". ./falcon_env.sh && ./client/falcon_client_stop.sh"
+      args:
+        chdir: "{{ [remote_src_dir, 'deploy'] | path_join }}"
+      environment:
+        LD_LIBRARY_PATH: "{{ extra_ld_library_path }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+        PATH: "{{ extra_path }}:{{ ansible_env.PATH | default('') }}"
+      when: inventory_hostname in groups['falconclient']
+    - name: Stop Cn
+      shell: /bin/bash -c ". ./falcon_env.sh && ./meta/falcon_meta_stop.sh"
+      args:
+        chdir: "{{ [remote_src_dir, 'deploy'] | path_join }}"
+      environment:
+        LD_LIBRARY_PATH: "{{ extra_ld_library_path }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+        PATH: "{{ extra_path }}:{{ ansible_env.PATH | default('') }}"
+      when: inventory_hostname in groups['falconcn']
+    - name: Stop Dn
+      shell: /bin/bash -c ". ./falcon_env.sh && ./meta/falcon_meta_stop.sh"
+      args:
+        chdir: "{{ [remote_src_dir, 'deploy'] | path_join }}"
+      environment:
+        LD_LIBRARY_PATH: "{{ extra_ld_library_path }}:{{ ansible_env.LD_LIBRARY_PATH | default('') }}"
+        PATH: "{{ extra_path }}:{{ ansible_env.PATH | default('') }}"
+      when: inventory_hostname in groups['falcondn']

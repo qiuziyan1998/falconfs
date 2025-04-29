@@ -1,0 +1,32 @@
+[falconcn]
+cn ansible_host=192.168.0.188 localip="192.168.0.188"     # choose 'only one' node as cn. the value 'localip' is the ip on which your nodes can communicate as fast as possible, at most time corresponding to the ip of LAN.
+
+[falcondn]
+dn0 ansible_host=192.168.0.88 localip="192.168.0.88"      # other nodes are dn.
+dn1 ansible_host=192.168.0.136 localip="192.168.0.136"
+
+[falconclient]
+client0 ansible_host=192.168.0.188 localip="192.168.0.188"
+client1 ansible_host=192.168.0.88 localip="192.168.0.88"
+client2 ansible_host=192.168.0.136 localip="192.168.0.136"
+
+[falconmeta:children]
+falconcn
+falcondn
+
+[falconall:children]
+falconmeta
+falconclient
+
+[falconall:vars]
+ansible_user="falcon"                                                                           # your user
+extra_ld_library_path="/usr/local/lib:/usr/local/obs/lib:/usr/local/lib64:/home/{{ ansible_user }}/metadb/lib"   # check the path to obs' lib
+extra_path="/home/{{ ansible_user }}/metadb/bin"
+falcon_repo_url="https://github.com/falcon-infra/falconfs.git"
+falcon_repo_version="main"
+remote_src_dir="/home/{{ ansible_user }}/code/falconfs"                                         # where to execute git clone
+falcon_server_port_prefix="555"                                                                 # port prefix of falcon meta server
+falcon_client_port="56039"                                                                      # port of client
+falcon_client_log_path="/tmp"                                                                   # path of client log
+falcon_client_cache_path="/tmp/falcon_cache"                                                    # base path for file cache to store (full path is /tmp/falcon_cache_{{ ansible_user }})
+mount_path="/home/{{ ansible_user }}/mnt"                                                       # mount path of fuse

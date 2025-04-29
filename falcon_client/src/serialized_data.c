@@ -1,0 +1,2 @@
+#define FALCON_REMOTE_CONNECTION_DEF_SERIALIZED_DATA_IMPLEMENT
+#include "remote_connection_utils/serialized_data.h"
