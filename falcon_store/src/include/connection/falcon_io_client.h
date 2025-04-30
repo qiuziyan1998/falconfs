@@ -13,6 +13,8 @@
 #include "brpc_io.pb.h"
 #include "util/utils.h"
 
+#define BRPC_RETRY_NUM 3
+
 class FalconIOClient {
   public:
     FalconIOClient()

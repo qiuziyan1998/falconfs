@@ -50,26 +50,15 @@ std::expected<std::string, std::string> GetPodIPPort()
     return std::unexpected("POD_IP environment variable not set");
 }
 
-bool TestOBS()
-{
-    const char *testOBSEnv = std::getenv("TEST_OBS");
-    return testOBSEnv != nullptr;
-}
-
-float GetBackGroundEvictRatio()
-{
-    const char *backGroundEvictRatio = std::getenv("BG_EVIT_RATIO");
-    if (backGroundEvictRatio == nullptr) {
-        return 0.2;
-    }
-    return atof(backGroundEvictRatio);
-}
-
-float GetStorageThreshold()
+float GetStorageThreshold(bool persistToStorage)
 {
     const char *storageThreshold = std::getenv("STORAGE_THRESHOLD");
     if (storageThreshold == nullptr) {
-        return 0.8;
+        if (persistToStorage) {
+            return 0.8;
+        } else {
+            return 1;
+        }
     }
     return atof(storageThreshold);
 }

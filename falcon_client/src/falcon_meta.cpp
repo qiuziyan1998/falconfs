@@ -460,7 +460,7 @@ int FalconWrite(uint64_t fd, const std::string & /*path*/, const char *buffer, s
     std::shared_ptr<OpenInstance> openInstance = FalconFd::GetInstance()->GetOpenInstanceByFd(fd);
     if (openInstance == nullptr) {
         FALCON_LOG(LOG_ERROR) << "In FalconWrite(): fd not found for openInstance";
-        return NOT_FOUND_FD;
+        return -NOT_FOUND_FD;
     }
 
     openInstance->writeCnt++;
@@ -473,7 +473,7 @@ int FalconRead(const std::string & /*path*/, uint64_t fd, char *buffer, size_t s
     std::shared_ptr<OpenInstance> openInstance = FalconFd::GetInstance()->GetOpenInstanceByFd(fd);
     if (openInstance == nullptr) {
         FALCON_LOG(LOG_ERROR) << "In FalconRead(): fd not found for openInstance";
-        return NOT_FOUND_FD;
+        return -NOT_FOUND_FD;
     }
 
     int ret = InnerFalconRead(openInstance.get(), buffer, size, offset);

@@ -48,7 +48,7 @@ int FalconStore::InitStore()
     persistToStorage = config->GetBool(FalconPropertyKey::FALCON_PERSIST);
     uint32_t preBlockNum = config->GetUint32(FalconPropertyKey::FALCON_PRE_BLOCKNUM);
     uint32_t threadNum = config->GetUint32(FalconPropertyKey::FALCON_THREAD_NUM);
-    float storageThreshold = GetStorageThreshold();
+    float storageThreshold = GetStorageThreshold(persistToStorage);
     parentPathLevel = GetParentPathLevel();
     bool ifStat = config->GetBool(FalconPropertyKey::FALCON_STAT);
     isInference = config->GetBool(FalconPropertyKey::FALCON_IS_INFERENCE);
@@ -71,7 +71,13 @@ int FalconStore::InitStore()
     READ_BIGFILE_SIZE = bigFileReadSize;
     SetRootPath(rootPath);
     SetTotalDirectory(totalDirectory);
-    ret = DiskCache::GetInstance().Start(rootPath, totalDirectory, 1.0 - storageThreshold, 1.1 - storageThreshold);
+    float diskFreeRatio = 0;
+    float bgDiskFreeRatio = 0;
+    if (storageThreshold < 1) {
+        diskFreeRatio = 1.0 - storageThreshold;
+        bgDiskFreeRatio = 1.1 - storageThreshold;
+    }
+    ret = DiskCache::GetInstance().Start(rootPath, totalDirectory, diskFreeRatio, bgDiskFreeRatio);
     if (ret != 0) {
         FALCON_LOG(LOG_ERROR) << "DiskCache start failed";
         return 1;
@@ -500,13 +506,20 @@ ssize_t FalconStore::ReadFileLR(char *readBuffer, off_t offset, OpenInstance *op
                 StoreNode::GetInstance()->GetRpcConnection(openInstance->nodeId);
             retSize = -EHOSTUNREACH;
             if (falconIOClient != nullptr) {
-                retSize = falconIOClient->ReadFile(openInstance->inodeId,
-                                                   openInstance->oflags,
-                                                   readBuffer,
-                                                   openInstance->physicalFd,
-                                                   readBufferSize,
-                                                   offset,
-                                                   openInstance->path);
+                for (int i = 0; i < BRPC_RETRY_NUM; ++i) {
+                    retSize = falconIOClient->ReadFile(openInstance->inodeId,
+                                                       openInstance->oflags,
+                                                       readBuffer,
+                                                       openInstance->physicalFd,
+                                                       readBufferSize,
+                                                       offset,
+                                                       openInstance->path);
+                    if (retSize == -ETIMEDOUT) {
+                        FALCON_LOG(LOG_ERROR) << "Reach timeout, retry num is " << i;
+                    } else {
+                        break;
+                    }
+                }
             }
             if (retSize != checkReadLength) {
                 FALCON_LOG(LOG_ERROR) << "In ReadFileLR(): read remote failed: " << strerror(-retSize) << ", for node "
@@ -714,7 +727,8 @@ int FalconStore::OpenFileFromRemote(OpenInstance *openInstance, bool largeFile)
     std::shared_ptr<FalconIOClient> falconIOClient = nullptr;
 
     /* Loop on connection error, switch node after that */
-    for (int i = 0; i < nodeCnt && ConnectionError(ret); i++) {
+    int retryNum = BRPC_RETRY_NUM;
+    for (int i = 0; i < nodeCnt && ConnectionError(ret) && retryNum > 0; i++) {
         falconIOClient = StoreNode::GetInstance()->GetRpcConnection(openInstance->nodeId);
         if (falconIOClient) {
             if (largeFile) {
@@ -734,7 +748,14 @@ int FalconStore::OpenFileFromRemote(OpenInstance *openInstance, bool largeFile)
             }
         }
         if (ConnectionError(ret)) {
-            StoreNode::GetInstance()->DeleteNode(openInstance->nodeId);
+            if (ret != ETIMEDOUT) {
+                StoreNode::GetInstance()->DeleteNode(openInstance->nodeId);
+            }
+            if (retryNum > 0 && ret == ETIMEDOUT) {
+                FALCON_LOG(LOG_ERROR) << "Reach timeout, retry num is " << i;
+                retryNum--;
+                continue;
+            }
             /* in inference scenario, do not switch node in non-create case */
             if (!persistToStorage && (openInstance->oflags & O_CREAT) == 0) {
                 break;

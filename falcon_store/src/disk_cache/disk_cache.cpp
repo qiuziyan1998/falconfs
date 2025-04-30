@@ -40,6 +40,7 @@ int DiskCache::Start(std::string &path, int dirNum, float ratio, float bgEvitRat
     int ret = RETURN_OK;
     if (ratio == 0) {
         stop = true;
+        return ret;
     }
     bgFreeRatio = bgEvitRatio;
     ret = ScanCache();
@@ -58,7 +59,6 @@ int DiskCache::Start(std::string &path, int dirNum, float ratio, float bgEvitRat
     }
 
     cleanupThread = std::thread(&DiskCache::CheckFreeSpace, this);
-    testOBS = TestOBS();
     return RETURN_OK;
 }
 
@@ -329,9 +329,6 @@ bool DiskCache::Find(uint64_t key, bool needPin)
     if (stop) {
         std::string fileName = GetFilePath(key);
         return access(fileName.c_str(), F_OK) == 0;
-    }
-    if (testOBS) {
-        return false;
     }
     std::lock_guard<std::mutex> lock(mutex);
     if (inodeToCacheIter.find(key) != inodeToCacheIter.end()) {
