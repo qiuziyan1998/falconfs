@@ -37,7 +37,7 @@ FalconFS can deploy one or more file data store instances within each compute no
 
 As each metadata server can perform file path resolution locally, clients can complete most of file operations in one network round trip time (RTT).  Clients use cached shard mapping to route each metadata request to the appropriate metadata server. In case of membership changes of metadata servers or online migration events of shards, clients would receive errors from the metadata servers and refresh its cached shard mapping.
 
-FalconFS supports standard POSIX API in the user-space through the Linux fuse framework. However, fuse client introduces some noticeable overhead compared to native-kernel client (e.g., Lustre kernel client). We also introduce several optimizations to the fuse module, which significantly alleviates the fuse overhead and the advanced fuse module will be open-sourced in the next month. In order to completely avoid the fuse cost, FalconFS also supports libFS interfaces.
+FalconFS supports standard POSIX API in the user-space through the Linux fuse framework. However, fuse client introduces some noticeable overhead compared to native-kernel client (e.g., Lustre kernel client). We also introduce several optimizations to the fuse module, which significantly alleviates the fuse overhead and the advanced fuse module will be open-sourced in the near future. In order to completely avoid the fuse cost, FalconFS also supports libFS interfaces.
 
 
 ## Copyright
