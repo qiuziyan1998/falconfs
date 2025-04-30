@@ -51,8 +51,8 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
     <br>We evaluate the performance of accessing small files with different file sizes. As shown in following figures, Y-axis is the throughput normalized to that of FalconFS. Thanks to FalconFS's higher metadata performance, it outperforms other DFSs in small file access. For files no larger than 64 KB, FalconFS achieves 7.35--21.23x speedup over CephFS, 0.86--24.87x speedup over JuiceFS and 1.12--1.85x speedup over Lustre. For files whose size is larger than 256 KiB, the performance of FalconFS is bounded by the aggregated SSD bandwidth. 
 </div>
 
-![read-throughput](https://github.com/user-attachments/assets/db2fbaa4-0935-46e1-a5ce-dfe1fc224fc2)
-![write-throughput](https://github.com/user-attachments/assets/fe124ceb-d074-40d1-a49d-a8c9e6d05800)
+![read-throughput](https://github.com/user-attachments/assets/c22f1e42-5a55-4f82-b08c-908cdc8aca4d)
+![write-throughput](https://github.com/user-attachments/assets/73f73b19-1664-4c72-a712-592afbc931d6)
 <br>
 
 <div style="text-align: center;">
@@ -62,7 +62,7 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
     <br> We simulate training ResNet-50 model on a dataset containing 10 million files, each file contains one 131 KB object, which is a typical scenario for deep learning model training in production. MLPerf has been modified to avoid merging small files into large ones, simulating real-world business scenarios while reducing the overhead associated with merge and copy operations. The FalconFS client utilizes an optimized FUSE module to minimize overhead, and the module will be open-sourced in the near future. Taking 90% accelerator utilization as the threshold, FalconFS supports up to 80 accelerators while Lustre can only support 32 accelerators on the experiment hardware.
 </div>
 
-![mlperf](https://github.com/user-attachments/assets/b1296584-9872-4025-a404-cba50c1b453d)
+![mlperf](https://github.com/user-attachments/assets/30f4e24f-a933-49b8-8163-306b1c45e3c0)
 
 <br>
 
