@@ -116,7 +116,7 @@ docker run --privileged -d -it --name falcon-dev -v `pwd`:/root/code -w /root/co
 docker exec -it --detach-keys="ctrl-z,z" falcon-dev /bin/zsh
 git -C third_party/postgres apply ../../patches/no_root_check.patch
 ./build.sh clean
-./build.sh build --debug
+./build.sh build --debug && ./build.sh install
 source deploy/falcon_env.sh
 ./deploy/falcon_start.sh
 ```
