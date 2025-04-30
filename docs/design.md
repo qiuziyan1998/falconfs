@@ -8,7 +8,7 @@ The file store engine is responsible for storing assigned files across local DRA
 
 The cluster management is responsible for managing membership of metadata nodes and file store nodes. We currently adopt Zookeeper to serve such role.
 
-![FalconFS Architecture](images/architecture.png)
+![FalconFS Architecture](https://github.com/user-attachments/assets/5ff1e80a-4cce-4b05-a35d-8da54191fb30)
 
 ## Falcon metadata engine
 The Falcon metadata engine adopts a shared-nothing scale-out architecture which consists of a set of metadata servers and distributes the file system metadata across them. The Falcon metadata engine is built on top of the PostgreSQL database as an extension and we mainly use its table and transaction management, B-link tree index, xlog (Write-ahead logging) and primary-secondary replication to manage metadata shards.  The metadata engine then distributes the file system metadata across a set of PostgreSQL instances (called metadata server or meta DB) and uses two-phase commit and locking protocol to guarantee ACID properties for file system operations. Each meta DB can be configured with several secondary DBs for high availability, which forms a replication group. We adopt the cluster manager to manage the membership for each replication group, which elects a new primary DB within the group when its old primary DB fails.
