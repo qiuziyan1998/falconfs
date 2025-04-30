@@ -3,13 +3,13 @@
 [![Build](https://github.com/falcon-infra/falconfs/actions/workflows/build.yml/badge.svg)](https://github.com/falcon-infra/falconfs/actions/workflows/build.yml)
 [![License](https://img.shields.io/badge/License-Mulan%20PSL%202-green)](LICENSE)
 
-FalconFS is a high-performance distributed file system (DFS) optimized for AI workloads by addressing three key challenges:  
+FalconFS is a high-performance distributed file system (DFS) optimized for AI workloads. It addresses the following challenges:  
 
 1. **Massive small files** – Its high-performance distributed metadata engine dramatically improves I/O throughput of handling massive small files (e.g., images), eliminating storage bottlenecks in AI data preprocessing and model training.
 
 2. **High throughput requirement** – In tiered storage (i.e., DRAM, SSD and elastic object store), FalconFS can aggregates near-compute DRAM and SSDs to provide over TB/s high throughput for AI workloads (e.g., KV Cache Offloading, model training and data preprocessing).
 
-3. **Large scale** - FalconFS can scale to thousands of NPUs due to its scale-out metadata engine and scale-up single metadata performance.
+3. **Large scale** - FalconFS can scale to thousands of NPUs through its scale-out metadata engine and scale-up single metadata performance.
 
 Through the above advantages, FalconFS delivers an ideal storage solution for modern AI pipelines.
 
@@ -28,7 +28,7 @@ Through the above advantages, FalconFS delivers an ideal storage solution for mo
 - **OS:** Ubuntu 20.04 Server 64-bit
 
 > **ℹ️ Note**  
-> This experiment uses an optimized Linux fuse module. The relevant code will be open-sourced later.
+> This experiment uses an optimized Linux fuse module. The relevant code will be open-sourced in the near future.
 
 We conduct the experiments in a cluster of 13 dual-socket machines, whose configuration is shown above. To better simulate large scale deployment in data centers, we have the following setups:
 - First, to expand the test scale, we abstract each machine into two nodes, with each node bound to one socket, one SSD, and one NIC, scaling up the testbed to 26 nodes.
@@ -58,7 +58,7 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
     <font size="5">
         <b>MLPerf ResNet-50 Training Storage Benchmark.</b>
     </font>
-    <br> We simulate training ResNet-50 model on a dataset containing 10 million files, each file contains one 131 KB object, which is a typical scenario for deep learning model training in production. MLPerf has been modified to avoid merging small files into large ones, simulating real-world business scenarios while reducing the overhead associated with merge and copy operations. The FalconFS client utilizes an optimized FUSE module to minimize overhead, and the module will be open-sourced in the near future. Taking 90% accelerator utilization as the threshold, FalconFS supports up to 80 accelerators while Lustre can only support 32 accelerators on the experiment hardware.
+    <br> We simulate training ResNet-50 model on a dataset containing 10 million files, each file contains one 131 KB object, which is a typical scenario for deep learning model training in production. MLPerf has been modified to avoid merging small files into large ones, simulating real-world business scenarios while reducing the overhead associated with merge and copy operations. Taking 90% accelerator utilization as the threshold, FalconFS supports up to 80 accelerators while Lustre can only support 32 accelerators on the experiment hardware.
 </div>
 
 ![alt text](./docs/images/mlperf.png)
