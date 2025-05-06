@@ -84,7 +84,14 @@ int WriteStream::PersistToFile(const char *buf, size_t size, off_t offset, uint6
 
     ssize_t retSize = 0;
     if (client != nullptr) {
-        retSize = client->WriteFile(physicalFd, buf, size, offset);
+        retSize = -ETIMEDOUT;
+        for (int i = 0; i < BRPC_RETRY_NUM && retSize == -ETIMEDOUT; ++i) {
+            retSize = client->WriteFile(physicalFd, buf, size, offset);
+            if (retSize == -ETIMEDOUT) {
+                sleep(BRPC_RETRY_DELEY);
+                FALCON_LOG(LOG_ERROR) << "Reach timeout, retry num is " << i;
+            }
+        }
         if (retSize != 0) {
             FALCON_LOG(LOG_ERROR) << "In WriteStream::persistToFile(): remote persist failed";
             return retSize;
@@ -123,7 +130,14 @@ int WriteStream::Complete(uint64_t currentSize, bool isFlush, bool isSync)
     std::unique_lock<std::shared_mutex> xlock(mutex);
     if (client != nullptr) {
         if (!data.Empty()) {
-            int ret = client->CloseFile(physicalFd, isFlush, isSync, data.buf.c_str(), data.size, data.offset);
+            int ret = -ETIMEDOUT;
+            for (int i = 0; i < BRPC_RETRY_NUM && ret == -ETIMEDOUT; ++i) {
+                ret = client->CloseFile(physicalFd, isFlush, isSync, data.buf.c_str(), data.size, data.offset);
+                if (ret == -ETIMEDOUT) {
+                    sleep(BRPC_RETRY_DELEY);
+                    FALCON_LOG(LOG_ERROR) << "Reach timeout, retry num is " << i;
+                }
+            }
             data.Clear();
             return ret;
         }
