@@ -515,6 +515,7 @@ ssize_t FalconStore::ReadFileLR(char *readBuffer, off_t offset, OpenInstance *op
                                                        offset,
                                                        openInstance->path);
                     if (retSize == -ETIMEDOUT) {
+                        sleep(BRPC_RETRY_DELEY);
                         FALCON_LOG(LOG_ERROR) << "Reach timeout, retry num is " << i;
                     } else {
                         break;
@@ -752,6 +753,7 @@ int FalconStore::OpenFileFromRemote(OpenInstance *openInstance, bool largeFile)
                 StoreNode::GetInstance()->DeleteNode(openInstance->nodeId);
             }
             if (retryNum > 0 && ret == ETIMEDOUT) {
+                sleep(BRPC_RETRY_DELEY);
                 FALCON_LOG(LOG_ERROR) << "Reach timeout, retry num is " << i;
                 retryNum--;
                 continue;

@@ -14,6 +14,7 @@
 #include "util/utils.h"
 
 #define BRPC_RETRY_NUM 3
+#define BRPC_RETRY_DELEY 1
 
 class FalconIOClient {
   public:

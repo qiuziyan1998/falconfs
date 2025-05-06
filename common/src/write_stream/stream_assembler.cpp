@@ -88,6 +88,7 @@ int WriteStream::PersistToFile(const char *buf, size_t size, off_t offset, uint6
         for (int i = 0; i < BRPC_RETRY_NUM && retSize == -ETIMEDOUT; ++i) {
             retSize = client->WriteFile(physicalFd, buf, size, offset);
             if (retSize == -ETIMEDOUT) {
+                sleep(BRPC_RETRY_DELEY);
                 FALCON_LOG(LOG_ERROR) << "Reach timeout, retry num is " << i;
             }
         }
@@ -133,6 +134,7 @@ int WriteStream::Complete(uint64_t currentSize, bool isFlush, bool isSync)
             for (int i = 0; i < BRPC_RETRY_NUM && ret == -ETIMEDOUT; ++i) {
                 ret = client->CloseFile(physicalFd, isFlush, isSync, data.buf.c_str(), data.size, data.offset);
                 if (ret == -ETIMEDOUT) {
+                    sleep(BRPC_RETRY_DELEY);
                     FALCON_LOG(LOG_ERROR) << "Reach timeout, retry num is " << i;
                 }
             }
