@@ -74,7 +74,7 @@ git clone https://github.com/falcon-infra/falconfs.git
 cd falconfs
 git submodule update --init --recursive # submodule update postresql
 ./patches/apply.sh
-docker run -it --rm -v `pwd`:/root/code -w /root/code/falconfs ghcr.io/falcon-infra/falconfs-dev:0.1.0 /bin/zsh
+docker run -it --rm -v `pwd`/..:/root/code -w /root/code/falconfs ghcr.io/falcon-infra/falconfs-dev:0.1.1 /bin/zsh
 ./build.sh
 ln -s /root/code/falconfs/falcon/build/compile_commands.json . # use for clangd
 ```
@@ -112,7 +112,7 @@ cd falconfs
 
 no root check debug, suppose at the `~/code` dir
 ``` bash
-docker run --privileged -d -it --name falcon-dev -v `pwd`:/root/code -w /root/code/falconfs ghcr.io/falcon-infra/falconfs-dev:0.1.0
+docker run --privileged -d -it --name falcon-dev -v `pwd`:/root/code -w /root/code/falconfs ghcr.io/falcon-infra/falconfs-dev:0.1.1
 docker exec -it --detach-keys="ctrl-z,z" falcon-dev /bin/zsh
 git -C third_party/postgres apply ../../patches/no_root_check.patch
 ./build.sh clean
