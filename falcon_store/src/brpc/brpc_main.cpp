@@ -11,6 +11,7 @@
 #include <bthread/unstable.h>
 #include <butil/iobuf.h>
 #include <memory_resource>
+#include <print>
 
 #include "buffer/dir_open_instance.h"
 #include "buffer/open_instance.h"
@@ -177,7 +178,12 @@ void RemoteIOServiceImpl::ReadFile(google::protobuf::RpcController *cntl_base,
     }
 
     response->set_error_code(0);
+#ifdef USE_RDMA
+    cntl->response_attachment().append(buffer, retSize);
+    free(buffer);
+#else
     cntl->response_attachment().append_user_data(buffer, retSize, [](void *buf) { free(buf); });
+#endif
 }
 
 void RemoteIOServiceImpl::ReadSmallFile(google::protobuf::RpcController *cntl_base,
@@ -236,7 +242,12 @@ void RemoteIOServiceImpl::ReadSmallFile(google::protobuf::RpcController *cntl_ba
         needAlign ? static_cast<std::function<void(void *)>>([](void *buf) { free(buf); })
                   : static_cast<std::function<void(void *)>>(
                         [allocatedSize, &pool, buffer](void *) { pool.deallocate(buffer, allocatedSize); });
+#ifdef USE_RDMA
+    cntl->response_attachment().append(buffer, readSize);
+    deleter(buffer);
+#else
     cntl->response_attachment().append_user_data(buffer, readSize, deleter);
+#endif
 }
 
 void RemoteIOServiceImpl::WriteFile(google::protobuf::RpcController *cntl_base,
@@ -398,7 +409,10 @@ int RemoteIOServer::Run()
     butil::EndPoint point;
     butil::str2endpoint(endPoint.c_str(), &point);
     brpc::ServerOptions options;
-
+#ifdef USE_RDMA
+    std::println("BRPC is configured to use RDMA");
+    options.use_rdma = true;
+#endif
     if (server.Start(point, &options) != 0) {
         FALCON_LOG(LOG_ERROR) << "Fail to start EchoServer";
         return -1;

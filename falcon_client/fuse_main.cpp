@@ -24,15 +24,6 @@
 #include "init/falcon_init.h"
 #include "stats/falcon_stats.h"
 
-static struct options
-{
-    int totalConn;
-} options;
-
-#define OPTION(t, p) {t, offsetof(struct options, p), 1}
-
-static const struct fuse_opt option_spec[] = {OPTION("--total_conn=%d", totalConn), FUSE_OPT_END};
-
 static bool g_persist = false;
 
 int DoGetAttr(const char *path, struct stat *stbuf)
@@ -432,10 +423,17 @@ DEFINE_string(rpc_endpoint, "0.0.0.0:56039", "endpoint of rpc server");
 DEFINE_string(f, "", "fuse ops, unneeded");
 DEFINE_string(o, "", "fuse ops, unneeded");
 DEFINE_string(d, "", "fuse ops, unneeded");
+DEFINE_string(brpc, "", "optional ops, unneeded");
 
 int main(int argc, char *argv[])
 {
-    int fuseArgc = argc - 2;
+    int fuseArgc = argc;
+    for (int i = 0; i < argc; ++i) {
+        if (strcmp(argv[i], "-brpc") == 0) {
+            fuseArgc = i;
+            break;
+        }
+    }
     std::vector<std::unique_ptr<char[]>> fuseArgvStorage(fuseArgc);
     std::vector<char *> fuseArgv(fuseArgc);
 
@@ -467,8 +465,8 @@ int main(int argc, char *argv[])
     std::string serverIp = config->GetString(FalconPropertyKey::FALCON_SERVER_IP);
     std::string serverPort = config->GetString(FalconPropertyKey::FALCON_SERVER_PORT);
     g_persist = config->GetBool(FalconPropertyKey::FALCON_PERSIST);
-
 #ifdef ZK_INIT
+    std::println("Initialize with ZK");
     const char *zkEndPoint = std::getenv("zk_endpoint");
     if (zkEndPoint == nullptr) {
         std::println(stderr, "Fetch zk endpoint failed!");
@@ -487,11 +485,6 @@ int main(int argc, char *argv[])
         return ret;
     }
     server.SetReadyFlag();
-
-    if (fuse_opt_parse(&args, &options, option_spec, nullptr) == -1) {
-        std::println(stderr, "args parse error! Invalid options or arguments");
-        return 1;
-    }
     std::println("{}", ret);
     ret = fuse_main(args.argc, args.argv, &falconOperations, nullptr);
     fuse_opt_free_args(&args);
