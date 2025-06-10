@@ -7,9 +7,9 @@ ENV TZ=Asia/Shanghai \
     LANGUAGE=en_US:en \
     LC_ALL=en_US.UTF-8
 
-RUN apt-get install -y vim fuse
+RUN apt-get install -y vim fuse gdb pstack
 
-RUN mkdir /opt/log/ && mkdir /opt/falcon/ && mkdir /opt/conf/ && mkdir /opt/output/ && mkdir /mnt/falcon/
+RUN mkdir /opt/log && mkdir /opt/falcon/ && mkdir /opt/conf/ && mkdir /mnt/falcon/
 COPY config.json /opt/conf/
 ENV CONFIG_FILE=/opt/conf/config.json
 COPY falconfs /root/falconfs
