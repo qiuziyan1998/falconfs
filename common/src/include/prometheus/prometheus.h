@@ -88,7 +88,7 @@ int startPrometheusMonitor(const std::string &endpoint, std::stop_token stoken)
     // drop stale stats
     int ret = FalconStore::GetInstance()->StatCluster(-1, currentStats, false);
     while (!stoken.stop_requested()) {
-        sleep(60);
+        sleep(1);
         ret = FalconStore::GetInstance()->StatCluster(-1, currentStats, false);
         if (ret != 0) {
             FALCON_LOG(LOG_ERROR) << "StatCluster failed: " << strerror(-ret);
