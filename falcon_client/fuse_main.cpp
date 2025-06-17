@@ -24,7 +24,9 @@
 #include "init/falcon_init.h"
 #include "stats/falcon_stats.h"
 #include "connection/falcon_io_client.h"
+#ifdef WITH_PROMETHEUS
 #include "prometheus/prometheus.h"
+#endif
 
 static bool g_persist = false;
 
@@ -536,6 +538,7 @@ int main(int argc, char *argv[])
         FalconStats::GetInstance().storeStatforGet(stoken);
     });
 
+#ifdef WITH_PROMETHEUS
     /* Start prometheus monitor */
     bool usePrometheus = config->GetBool(FalconPropertyKey::FALCON_USE_PROMETHEUS);
     std::jthread prometheusThread;
@@ -555,6 +558,7 @@ int main(int argc, char *argv[])
             startPrometheusMonitor("0.0.0.0:" + prometheusPort, stoken);
         });
     }
+#endif
 
     std::println("{}", ret);
     ret = fuse_main(args.argc, args.argv, &falconOperations, nullptr);

@@ -22,7 +22,7 @@
         "falcon_log_reserved_num": 3,
         "falcon_log_reserved_time": 1,
         "falcon_stat_max": false,
-        "falcon_use_prometheus": true,
+        "falcon_use_prometheus": false,
         "falcon_prometheus_port": "50040"
     }
 }
