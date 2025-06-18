@@ -16,7 +16,7 @@ gen_config() {
 
 pushd $FALCONFS_DIR
 ./build.sh build pg && ./build.sh install
-./build.sh build falcon --with-zk-init
+./build.sh build falcon --with-zk-init --with-prometheus
 popd
 pushd $DIR
 mkdir -p $DIR/store/falconfs/bin/
