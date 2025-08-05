@@ -85,6 +85,9 @@ int FalconMkdir(const std::string &path)
         errorCode = conn->Mkdir(path.c_str());
     }
 #endif
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconMkdir failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     return errorCode;
 }
 
@@ -107,13 +110,16 @@ int FalconCreate(const std::string &path, uint64_t &fd, int oflags, struct stat 
         errorCode = conn->Create(path.c_str(), inodeId, nodeId, stbuf);
     }
 #endif
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconCreate failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     if (errorCode == FILE_EXISTS && (oflags & O_EXCL))
         return FILE_EXISTS;
 
     fd = FalconFd::GetInstance()->AttachFd(inodeId, oflags, nullptr, stbuf->st_size, path, nodeId);
     if (fd == UINT64_MAX) {
         FalconFd::GetInstance()->DeleteOpenInstance(fd);
-        return NOT_FOUND_FD;
+        return -EMFILE;
     }
     return errorCode;
 }
@@ -135,6 +141,9 @@ int FalconGetStat(const std::string &path, struct stat *stbuf)
         errorCode = conn->Stat(path.c_str(), stbuf);
     }
 #endif
+    if (errorCode != SUCCESS && errorCode != FILE_NOT_EXISTS) {
+        FALCON_LOG(LOG_ERROR) << "FalconGetStat failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     return errorCode;
 }
 
@@ -149,7 +158,7 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
     std::shared_ptr<OpenInstance> openInstance = FalconFd::GetInstance()->WaitGetNewOpenInstance();
     if (openInstance == nullptr) {
         FALCON_LOG(LOG_ERROR) << "new openInstance failed";
-        return -ENOMEM;
+        return -EMFILE;
     }
     uint64_t inodeId = 0;
     int64_t size = 0;
@@ -164,6 +173,10 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
         errorCode = conn->Open(path.c_str(), inodeId, size, nodeId, stbuf);
     }
 #endif
+    if (errorCode != SUCCESS) {
+        FalconFd::GetInstance()->ReleaseOpenInstance();
+        FALCON_LOG(LOG_ERROR) << "FalconOpen failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     openInstance->inodeId = inodeId;
     openInstance->originalSize = size;
     openInstance->currentSize = size;
@@ -251,6 +264,9 @@ int FalconClose(const std::string &path, uint64_t fd, bool isFlush, int datasync
         errorCode = conn->Close(path.c_str(), size, 0, openInstance->nodeId);
     }
 #endif
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconClose failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     openInstance->originalSize = size;
     if (!isFlush) {
         FalconFd::GetInstance()->DeleteOpenInstance(fd);
@@ -279,6 +295,9 @@ int FalconUnlink(const std::string &path)
         errorCode = conn->Unlink(path.c_str(), inodeId, size, nodeId);
     }
 #endif
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconUnlink failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     int ret = 0;
     if (errorCode == SUCCESS) {
         // delete data
@@ -309,6 +328,7 @@ int FalconReadDir(const std::string &path, void *buf, FalconFuseFiller filler, o
         ret = router->GetAllWorkerConnection(workerInfo);
 
         if (ret != SUCCESS) {
+            FALCON_LOG(LOG_ERROR) << "FalconReadDir failed for path: " << path << ", GET_ALL_WORKER_CONN_FAILED";
             return GET_ALL_WORKER_CONN_FAILED;
         }
         dirOpenInstance->SetAllWorkerInfo(workerInfo);
@@ -406,7 +426,9 @@ int FalconOpenDir(const std::string &path, struct FalconFuseInfo *fi)
         errorCode = conn->OpenDir(path.c_str(), inodeId);
     }
 #endif
-
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconOpenDir failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     if (errorCode == 0) {
         uint64_t fd = 0;
         fd = FalconFd::GetInstance()->AttachDirFd(errorCode);
@@ -451,7 +473,9 @@ int FalconRmDir(const std::string &path)
         errorCode = conn->Rmdir(path.c_str());
     }
 #endif
-
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconRmDir failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     return errorCode;
 }
 
@@ -500,6 +524,9 @@ int FalconRename(const std::string &srcName, const std::string &dstName)
         errorCode = conn->Rename(srcName.c_str(), dstName.c_str());
     }
 #endif
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconRename failed for srcName: " << srcName << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     return errorCode;
 }
 
@@ -542,6 +569,9 @@ int FalconRenamePersist(const std::string &srcName, const std::string &dstName)
         errorCode = conn->Rename(srcName.c_str(), dstName.c_str());
     }
 #endif
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconRenamePersist failed for srcName: " << srcName << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     if (errorCode == SUCCESS) {
         // delete src object
         InnerFalconDeleteDataAfterRename(srcName);
@@ -581,6 +611,9 @@ int FalconUtimens(const std::string &path, int64_t accessTime, int64_t modifyTim
         errorCode = conn->UtimeNs(path.c_str(), accessTime, modifyTime);
     }
 #endif
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconUtimens failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     return errorCode;
 }
 
@@ -602,6 +635,9 @@ int FalconChown(const std::string &path, uid_t uid, gid_t gid)
         errorCode = conn->Chown(path.c_str(), uid, gid);
     }
 #endif
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconChown failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     return errorCode;
 }
 
@@ -623,6 +659,9 @@ int FalconChmod(const std::string &path, mode_t mode)
         errorCode = conn->Chmod(path.c_str(), mode);
     }
 #endif
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconChmod failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+    }
     return errorCode;
 }
 

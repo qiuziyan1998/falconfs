@@ -107,8 +107,14 @@ int StoreNode::SetNodeConfig(std::string &rootPath)
     FALCON_LOG(LOG_INFO) << "In SetNodeConfig(): local nodeId = " << nodeId;
     std::mutex mu;
     std::unique_lock<std::mutex> lock(mu);
-    FalconCM::GetInstance()->GetStoreNodeCompleteCv().wait(lock,
-                                                           []() { return FalconCM::GetInstance()->GetNodeStatus(); });
+    bool status = false;
+    while (!status) {
+        status = FalconCM::GetInstance()->GetStoreNodeCompleteCv().wait_for(lock, std::chrono::seconds(3),
+            []() { return FalconCM::GetInstance()->GetNodeStatus(); });
+        if (!status) {
+            FALCON_LOG(LOG_WARNING) << "SetNodeConfig: Waiting 3s for store node status to be ready";
+        }
+    }
 
     ret = UpdateNodeConfig();
     std::thread FetchView([this]() {

@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <atomic>
+#include <chrono>
 #include <shared_mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -20,7 +21,8 @@
 #include "connection.h"
 
 constexpr int START_FD = 3;
-constexpr int MAX_OPENINSTANCE_NUM = 4000;
+
+void SetMaxOpenInstanceNum(uint32_t num);
 
 struct DirOpenInstance
 {
@@ -92,6 +94,7 @@ class FalconFd {
     std::shared_ptr<OpenInstance> WaitGetNewOpenInstance(bool addCnt = true);
     void ReleaseOpenInstance();
     std::unordered_set<std::shared_ptr<OpenInstance>> GetInodetoOpenInstanceSet(uint64_t inodeId);
+    uint32_t GetCurrentOpenInstanceCount() const;
 
   private:
     std::unordered_map<uint64_t, std::shared_ptr<OpenInstance>> openInstanceMap;

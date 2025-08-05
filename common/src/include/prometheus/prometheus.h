@@ -15,6 +15,16 @@
 #include "log/logging.h"
 #include "falcon_store/falcon_store.h"
 
+double averageMS(size_t mus, size_t ops)
+{
+    if (ops == 0) {
+        return mus;
+    }
+    double time = static_cast<double>(mus) / (ops * 1000);
+    const auto precision = time < 10 ? 3 : time < 100 ? 2 : time < 1000 ? 1 : 0;
+    return std::round(time * std::pow(10.0, precision)) / std::pow(10.0, precision);
+}
+
 int startPrometheusMonitor(const std::string &endpoint, std::stop_token stoken)
 {
     static prometheus::Exposer exposer(endpoint);
@@ -80,6 +90,13 @@ int startPrometheusMonitor(const std::string &endpoint, std::stop_token stoken)
     auto &object_read_throughput = throughput.Add({{"category", "object"}, {"name", "object-read-throughput"}});
     auto &object_write_throughput = throughput.Add({{"category", "object"}, {"name", "object-write-throughput"}});
 
+    // system status metrics
+    auto &status = prometheus::BuildGauge()
+                           .Name("status")
+                           .Help("Current system status")
+                           .Register(*registry);
+    auto &current_fds = status.Add({{"category", "overall"}, {"name", "current-fds"}});
+
     // Register the gauge with the registry
     exposer.RegisterCollectable(registry);
 
@@ -112,23 +129,23 @@ int startPrometheusMonitor(const std::string &endpoint, std::stop_token stoken)
         flush_ops.Set(currentStats[META_FLUSH]);
         fsync_ops.Set(currentStats[META_FSYNC]);
 
-        overall_latency.Set(currentStats[FUSE_LAT]);
-        read_latency.Set(currentStats[FUSE_READ_LAT]);
-        write_latency.Set(currentStats[FUSE_WRITE_LAT]);
-        meta_latency.Set(currentStats[META_LAT]);
-        open_latency.Set(currentStats[META_OPEN_LAT]);
-        close_latency.Set(currentStats[META_RELEASE_LAT]);
-        stat_latency.Set(currentStats[META_STAT_LAT]);
-        create_latency.Set(currentStats[META_CREATE_LAT]);
+        overall_latency.Set(averageMS(currentStats[FUSE_LAT], currentStats[FUSE_OPS]));
+        read_latency.Set(averageMS(currentStats[FUSE_READ_LAT], currentStats[FUSE_READ_OPS]));
+        write_latency.Set(averageMS(currentStats[FUSE_WRITE_LAT], currentStats[FUSE_WRITE_OPS]));
+        meta_latency.Set(averageMS(currentStats[META_LAT], currentStats[META_OPS]));
+        open_latency.Set(averageMS(currentStats[META_OPEN_LAT], currentStats[META_OPEN]));
+        close_latency.Set(averageMS(currentStats[META_RELEASE_LAT], currentStats[META_RELEASE]));
+        stat_latency.Set(averageMS(currentStats[META_STAT_LAT], currentStats[META_STAT] + currentStats[META_LOOKUP]));
+        create_latency.Set(averageMS(currentStats[META_CREATE_LAT], currentStats[META_CREATE]));
 
-        overall_latency_max.Set(currentStats[FUSE_LAT_MAX]);
-        read_latency_max.Set(currentStats[FUSE_READ_LAT_MAX]);
-        write_latency_max.Set(currentStats[FUSE_WRITE_LAT_MAX]);
-        meta_latency_max.Set(currentStats[META_LAT_MAX]);
-        open_latency_max.Set(currentStats[META_OPEN_LAT_MAX]);
-        close_latency_max.Set(currentStats[META_RELEASE_LAT_MAX]);
-        stat_latency_max.Set(currentStats[META_STAT_LAT_MAX]);
-        create_latency_max.Set(currentStats[META_CREATE_LAT_MAX]);
+        overall_latency_max.Set(averageMS(currentStats[FUSE_LAT_MAX], 1));
+        read_latency_max.Set(averageMS(currentStats[FUSE_READ_LAT_MAX], 1));
+        write_latency_max.Set(averageMS(currentStats[FUSE_WRITE_LAT_MAX], 1));
+        meta_latency_max.Set(averageMS(currentStats[META_LAT_MAX], 1));
+        open_latency_max.Set(averageMS(currentStats[META_OPEN_LAT_MAX], 1));
+        close_latency_max.Set(averageMS(currentStats[META_RELEASE_LAT_MAX], 1));
+        stat_latency_max.Set(averageMS(currentStats[META_STAT_LAT_MAX], 1));
+        create_latency_max.Set(averageMS(currentStats[META_CREATE_LAT_MAX], 1));
 
         overall_read_throughput.Set(currentStats[FUSE_READ]);
         overall_write_throughput.Set(currentStats[FUSE_WRITE]);
@@ -136,6 +153,8 @@ int startPrometheusMonitor(const std::string &endpoint, std::stop_token stoken)
         blockcache_write_throughput.Set(currentStats[BLOCKCACHE_WRITE]);
         object_read_throughput.Set(currentStats[OBJ_GET]);
         object_write_throughput.Set(currentStats[OBJ_PUT]);
+
+        current_fds.Set(FalconFd::GetInstance()->GetCurrentOpenInstanceCount());
     }
 
     return 0;

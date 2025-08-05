@@ -6,6 +6,12 @@
 
 #include <cassert>
 
+static uint32_t maxOpenInstanceNum = 40000;
+void SetMaxOpenInstanceNum(uint32_t num)
+{
+    maxOpenInstanceNum = num;
+}
+
 FalconFd *FalconFd::GetInstance()
 {
     static FalconFd m_singleton;
@@ -32,6 +38,9 @@ void FalconFd::AddOpenInstance(uint64_t fd, std::shared_ptr<OpenInstance> openIn
 
 int FalconFd::DeleteOpenInstance(uint64_t fd, bool subCnt)
 {
+    if (fd == UINT64_MAX) {
+        return 0;
+    }
     int ret = -EBADF;
     std::unique_lock<std::shared_mutex> openInstanceMapLock(openInstanceMapMutex);
     auto it = openInstanceMap.find(fd);
@@ -150,10 +159,14 @@ int FalconFd::DeleteDirOpenInstance(uint64_t fd)
 
 std::shared_ptr<OpenInstance> FalconFd::WaitGetNewOpenInstance(bool addCnt)
 {
-    if (addCnt) {
+    if (addCnt && maxOpenInstanceNum != 0) {
         std::mutex mu;
         std::unique_lock<std::mutex> sleepLock(mu);
-        newOpenInstanceCV.wait(sleepLock, [this]() { return currOpenInstance.load() < MAX_OPENINSTANCE_NUM; });
+        bool status = newOpenInstanceCV.wait_for(sleepLock, std::chrono::seconds(3), [this]() { return currOpenInstance.load() < maxOpenInstanceNum; });
+        if (!status) {
+            FALCON_LOG(LOG_WARNING) << "WaitGetNewOpenInstance(): timeout waiting 3s, currOpenInstance = " << currOpenInstance.load() << ", max = " << maxOpenInstanceNum;
+            return nullptr;
+        }
     }
 
     std::shared_ptr<OpenInstance> instance;
@@ -172,6 +185,9 @@ std::shared_ptr<OpenInstance> FalconFd::WaitGetNewOpenInstance(bool addCnt)
 void FalconFd::ReleaseOpenInstance()
 {
     --currOpenInstance;
+    if (maxOpenInstanceNum == 0) {
+        return;
+    }
     newOpenInstanceCV.notify_one();
 }
 
@@ -180,4 +196,9 @@ std::unordered_set<std::shared_ptr<OpenInstance>> FalconFd::GetInodetoOpenInstan
     std::shared_lock<std::shared_mutex> lock(inodeToOpenInstanceMutex);
     return inodeToOpenInstanceMap.contains(inodeId) ? inodeToOpenInstanceMap.at(inodeId)
                                                     : std::unordered_set<std::shared_ptr<OpenInstance>>{};
+}
+
+uint32_t FalconFd::GetCurrentOpenInstanceCount() const
+{
+    return currOpenInstance.load();
 }
