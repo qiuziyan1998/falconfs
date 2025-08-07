@@ -24,6 +24,7 @@
 #include "init/falcon_init.h"
 #include "stats/falcon_stats.h"
 #include "connection/falcon_io_client.h"
+#include "buffer/dir_open_instance.h"
 #ifdef WITH_PROMETHEUS
 #include "prometheus/prometheus.h"
 #endif
@@ -483,6 +484,7 @@ int main(int argc, char *argv[])
                 continue;
             }
             if (cnt++ % 30 == 0) {
+                std::println(stdout, "Current opened fds = {}", FalconFd::GetInstance()->GetCurrentOpenInstanceCount());
                 printStatsHeader();
             }
             printStatsVector(convertStatstoString(stats));
@@ -507,9 +509,9 @@ int main(int argc, char *argv[])
         std::println(stderr, "Falcon init failed");
     }
     auto &config = GetInit().GetFalconConfig();
-    std::string serverIp = config->GetString(FalconPropertyKey::FALCON_SERVER_IP);
-    std::string serverPort = config->GetString(FalconPropertyKey::FALCON_SERVER_PORT);
     g_persist = config->GetBool(FalconPropertyKey::FALCON_PERSIST);
+    uint32_t maxOpenNum = config->GetUint32(FalconPropertyKey::FALCON_MAX_OPEN_NUM);
+    SetMaxOpenInstanceNum(maxOpenNum);
 #ifdef ZK_INIT
     std::println("Initialize with ZK");
     const char *zkEndPoint = std::getenv("zk_endpoint");
@@ -519,6 +521,8 @@ int main(int argc, char *argv[])
     }
     ret = FalconInitWithZK(zkEndPoint);
 #else
+    std::string serverIp = config->GetString(FalconPropertyKey::FALCON_SERVER_IP);
+    std::string serverPort = config->GetString(FalconPropertyKey::FALCON_SERVER_PORT);
     ret = FalconInit(serverIp, std::stoi(serverPort));
 #endif
     if (ret != FALCON_SUCCESS) {

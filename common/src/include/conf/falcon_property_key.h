@@ -49,6 +49,9 @@ class FalconPropertyKey : public PropertyKey {
     inline static const auto FALCON_PERSIST =
         PropertyKey::Builder("main", "falcon_persist", FALCON, FALCON_BOOL).build();
 
+    inline static const auto FALCON_MAX_OPEN_NUM =
+        PropertyKey::Builder("main", "falcon_max_open_num", FALCON, FALCON_UINT).build();
+
     inline static const auto FALCON_PRE_BLOCKNUM =
         PropertyKey::Builder("main", "falcon_preblock_num", FALCON, FALCON_UINT).build();
 
