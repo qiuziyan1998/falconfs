@@ -7,6 +7,7 @@ BUILD_TEST=true
 WITH_FUSE_OPT=false
 WITH_ZK_INIT=false
 WITH_RDMA=false
+WITH_PROMETHEUS=false
 
 # Default command is build
 COMMAND=${1:-build}
@@ -81,6 +82,7 @@ build_falconfs() {
         -DWITH_FUSE_OPT="$WITH_FUSE_OPT" \
         -DWITH_ZK_INIT="$WITH_ZK_INIT" \
         -DWITH_RDMA="$WITH_RDMA" \
+        -DWITH_PROMETHEUS="$WITH_PROMETHEUS" \
         -DBUILD_TEST=$BUILD_TEST &&
         cd "$BUILD_DIR" && ninja
     echo "FalconFS build complete."
@@ -231,6 +233,9 @@ build)
             --with-rdma)
                 WITH_RDMA=true
                 ;;
+            --with-prometheus)
+                WITH_PROMETHEUS=true
+                ;;
             --help | -h)
                 echo "Usage: $0 build falcon [options]"
                 echo ""
@@ -242,6 +247,8 @@ build)
                 echo "  --relwithdebinfo Build with debug symbols"
                 echo "  --with-fuse-opt Enable FUSE optimizations"
                 echo "  --with-zk-init Enable Zookeeper initialization for containerized deployment"
+                echo "  --with-rdma     Enable RDMA support"
+                echo "  --with-prometheus Enable Prometheus metrics"
                 exit 0
                 ;;
             *)

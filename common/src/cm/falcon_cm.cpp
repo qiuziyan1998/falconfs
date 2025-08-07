@@ -58,7 +58,10 @@ void FalconCM::DestroyCM()
 int FalconCM::WaitForConnect()
 {
     std::unique_lock<std::mutex> checkLock(zkMutex);
-    zkCV.wait(checkLock, [this] { return isConnected || connectionFailed || isConning; });
+    while (!zkCV.wait_for(checkLock, std::chrono::seconds(3), [this] { return isConnected || connectionFailed || isConning; })) {
+        FALCON_LOG(LOG_WARNING) << "WaitForConnect: Waiting 3s for zookeeper connection";
+    }
+    
     if (isConnected) {
         return RETURN_OK;
     } else if (isConning) {

@@ -22,6 +22,11 @@ if(WITH_RDMA)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_RDMA")
 endif()
 
+option(WITH_PROMETHEUS "Enable prometheus monitor" OFF)
+if(WITH_PROMETHEUS)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWITH_PROMETHEUS")
+endif()
+
 # ==================== Dependencies =================
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 find_package(BRPC REQUIRED)
@@ -51,6 +56,10 @@ set(DYNAMIC_LIB
     z
     glog
 )
+
+if(WITH_PROMETHEUS)
+    list(APPEND DYNAMIC_LIB "prometheus-cpp-pull" "prometheus-cpp-core")
+endif()
 
 # protobuf generated
 set(PROTO_SRC ${CMAKE_BINARY_DIR}/falcon_meta_rpc.pb.cc)

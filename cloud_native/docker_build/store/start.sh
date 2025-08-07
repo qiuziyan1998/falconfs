@@ -18,10 +18,10 @@ else
     fi
 fi
 
-if [ ! -d /mnt/falcon ]; then
-    mkdir -p /mnt/falcon
+if [ ! -d /mnt/data ]; then
+    mkdir -p /mnt/data
 else
-    rm -rf /mnt/falcon/*
+    rm -rf /mnt/data/*
 fi
 
-/root/falconfs/bin/falcon_client /mnt/falcon -f -o direct_io,allow_other,nonempty -o attr_timeout=20 -o entry_timeout=20 -brpc true -rpc_endpoint=0.0.0.0:50039 -socket_max_unwritten_bytes=268435456 > /opt/log/falconfs.out 2<&1 &
+/root/falconfs/bin/falcon_client /mnt/data -f -o direct_io,allow_other,nonempty -o attr_timeout=20 -o entry_timeout=20 -brpc true -rpc_endpoint=0.0.0.0:50039 -socket_max_unwritten_bytes=268435456 > /opt/log/falconfs.out 2<&1 &

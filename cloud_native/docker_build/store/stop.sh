@@ -1,11 +1,11 @@
 # !/bin/bash
 
 # 1. Unmount first (will stop the mounted instance)
-if mount | grep -q "/mnt/falcon"; then
-    fusermount -u "/mnt/falcon"
-    echo "Unmounted /mnt/falcon and stopped associated falcon_client"
+if mount | grep -q "/mnt/data"; then
+    umount -l "/mnt/data"
+    echo "Unmounted /mnt/data and stopped associated falcon_client"
 else
-    echo "/mnt/falcon is not mounted"
+    echo "/mnt/data is not mounted"
 fi
 
 # 2. Kill any remaining falcon_client processes (for unmounted instances)
