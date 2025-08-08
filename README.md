@@ -26,7 +26,7 @@ Through the above advantages, FalconFS delivers an ideal storage solution for mo
 
 
 
-## Data Performance
+## Performance
 **Test Environment Configuration:**
 - **CPU:** 2 x Intel Xeon 3.00GHz, 12 cores
 - **Memory:** 16 x DDR4 2933 MHz 16GB
@@ -74,7 +74,7 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
 <br>
 
 
-## Metadata Performance
+### Metadata Performance
 
 **Test Environment Configuration:**
 - **OS container over cloud VM:** OpenEuler 22.03-kernel 5.10.0
@@ -84,7 +84,7 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
 - **Network:** 100Gbps
 
 We conduct a metadata performance experiment in a Huawei cloud cluster of 5 VM servers, whose configuration is shown above. We deploy the FalconFS metadata engine on one single VM server and use the left four VM servers as clients. 
-To achieve the best performance, we start four metadata DNs each binding to one NUMA node on the single server using the following command: numactl --cpunodebind=${i} --localalloc pg_ctl start.
+To improve NUMA locality, we start four metadata DNs each binding to one NUMA node using the following command: numactl --cpunodebind=${i} --localalloc pg_ctl start.
 We do not enable metadata replication. To saturate the metadata server's computing capacity, clients use the LibFS interface to generate concurrent requests as many as possible. The LibFS interface and test scripts can be found under falconfs/tests/private-directory-test. 
 > **Note**  
 > This experiment only demonstrates the throughput of one metadata server and FalconFS can deliver scalable multi-server metadata throughput.
