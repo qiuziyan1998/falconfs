@@ -85,7 +85,7 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
 
 We conduct a metadata performance experiment in a cluster of 5 servers, whose configuration is shown above. We deploy the FalconFS metadata engine on one single server and use the remaining four servers as clients. 
 To improve NUMA locality, we start four metadata DNs each binding to one NUMA node within the metadata server using the following command: numactl --cpunodebind=${i} --localalloc pg_ctl start.
-We do not enable metadata replication. To saturate the metadata server's computing capacity, clients use the LibFS interface to generate concurrent requests as many as possible. The LibFS interface and test scripts can be found under falconfs/tests/private-directory-test. 
+We do not enable metadata replication. To saturate the metadata server's computing capacity, clients use the LibFS interface to generate as many concurrent requests as possible. The LibFS interface and test scripts can be found under falconfs/tests/private-directory-test. 
 > **Note**  
 > This experiment only demonstrates the throughput of one metadata server and FalconFS can deliver scalable multi-server metadata throughput.
 
