@@ -83,7 +83,7 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
 - **Storage:** 10 x 3.2TiB NVMe SSD
 - **Network:** 100Gbps
 
-We conduct a metadata performance experiment in a Huawei cloud cluster of 5 VM servers, whose configuration is shown above. We deploy the FalconFS metadata engine on one single VM server and use the left four VM servers as clients. 
+We conduct a metadata performance experiment in a Huawei cloud cluster of 5 VM servers, whose configuration is shown above. We deploy the FalconFS metadata engine on one single VM server and use the remaining four VM servers as clients. 
 To improve NUMA locality, we start four metadata DNs each binding to one NUMA node using the following command: numactl --cpunodebind=${i} --localalloc pg_ctl start.
 We do not enable metadata replication. To saturate the metadata server's computing capacity, clients use the LibFS interface to generate concurrent requests as many as possible. The LibFS interface and test scripts can be found under falconfs/tests/private-directory-test. 
 > **Note**  
