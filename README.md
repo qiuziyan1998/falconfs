@@ -44,7 +44,7 @@ We do not enable metadata replication. To saturate the metadata server's computi
     </font>
 </div>
 
-<img width="1413" height="877" alt="image" src="https://github.com/user-attachments/assets/2a81d5b1-71fb-4e73-8c88-a8e4df16bd85" />
+<img width="1413" height="877" alt="image" src="https://github.com/user-attachments/assets/1d70aa19-33f0-46eb-ae67-48846ff24191" />
 <br>
 
 ## Data Performance
