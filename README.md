@@ -24,9 +24,30 @@ Through the above advantages, FalconFS delivers an ideal storage solution for mo
 ![FalconFS Architecture](https://github.com/user-attachments/assets/5ff1e80a-4cce-4b05-a35d-8da54191fb30)
 
 
-## Performance
+## Metadata Performance
 
-### Data Performance
+**Test Environment Configuration:**
+- **OS:** OpenEuler 22.03-lts container over VM, kernel 5.10.0
+- **CPU:** Kunpeng 920 2.9GHz, 160 cores, arm
+- **Memory:** 1536GiB
+- **Storage:** 10 x 3.2TiB NVMe SSD
+- **Network:** 100Gbps
+
+We conduct a metadata performance experiment in a cluster of 5 servers, whose configuration is shown above. We deploy the FalconFS metadata engine on one single server and use the left four servers as clients. 
+To achieve the best performance, we start four metadata DNs each binding to a NUMA node on the single server using the following command: numactl --cpunodebind=${i} --localalloc pg_ctl start.
+We do not enable metadata replication. To saturate the metadata server's computing capacity, clients use the LibFS interface to generate concurrent requests as many as possible. The LibFS interface and test scripts can be found under falconfs/tests/private-directory-test. 
+
+<br>
+<div style="text-align: center;">
+    <font size="4">
+        <b>Throughput of single metadata server.</b>
+    </font>
+</div>
+
+<img width="1413" height="877" alt="image" src="https://github.com/user-attachments/assets/2a81d5b1-71fb-4e73-8c88-a8e4df16bd85" />
+<br>
+
+## Data Performance
 **Test Environment Configuration:**
 - **CPU:** 2 x Intel Xeon 3.00GHz, 12 cores
 - **Memory:** 16 x DDR4 2933 MHz 16GB
@@ -73,27 +94,7 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
 
 <br>
 
-### Meta Data Performance
 
-**Test Environment Configuration:**
-- **OS:** OpenEuler 22.03-lts container over VM, kernel 5.10.0
-- **CPU:** Kunpeng 920 2.9GHz, 160 cores, arm
-- **Memory:** 1536GiB
-- **Storage:** 10 x 3.2TiB NVMe SSD
-- **Network:** 100Gbps
-
-We conduct the experiments in a cluster of 5 machines, whose configuration is shown above. One operates as the server, other 4 as clients. Do not enable metadata replication.
-
-<br>
-<div style="text-align: center;">
-    <font size="4">
-        <b>Throughput of Meta data IO.</b>
-    </font>
-    <br>We evaluate the performance of create, stat, and open operations of the metadata server on a single node. To saturate matedata server's capacity, clients use LibFS interface to generate higher concurrency. Examples are in falconfs/tests/private-directory-test. To fully utilize the resources, four metadata dns were delpoyed and each bound to a NUMA node using the following command: numactl --cpunodebind=${i} --localalloc pg_ctl start
-</div>
-<img width="1413" height="877" alt="image" src="https://github.com/user-attachments/assets/2a81d5b1-71fb-4e73-8c88-a8e4df16bd85" />
-
-<br>
 
 
 
