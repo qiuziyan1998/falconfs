@@ -110,18 +110,21 @@ int FalconCreate(const std::string &path, uint64_t &fd, int oflags, struct stat 
         errorCode = conn->Create(path.c_str(), inodeId, nodeId, stbuf);
     }
 #endif
+    /* Handle the case of not exclusively created file */
+    if (errorCode == FILE_EXISTS && !(oflags & O_EXCL)) {
+        errorCode = SUCCESS;
+    }
     if (errorCode != SUCCESS) {
         FALCON_LOG(LOG_ERROR) << "FalconCreate failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+        return errorCode; 
     }
-    if (errorCode == FILE_EXISTS && (oflags & O_EXCL))
-        return FILE_EXISTS;
 
     fd = FalconFd::GetInstance()->AttachFd(inodeId, oflags, nullptr, stbuf->st_size, path, nodeId);
     if (fd == UINT64_MAX) {
         FalconFd::GetInstance()->DeleteOpenInstance(fd);
         return -EMFILE;
     }
-    return errorCode;
+    return SUCCESS;
 }
 
 int FalconGetStat(const std::string &path, struct stat *stbuf)
