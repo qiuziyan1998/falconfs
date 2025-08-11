@@ -158,11 +158,6 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
         return PROGRAM_ERROR;
     }
 
-    std::shared_ptr<OpenInstance> openInstance = FalconFd::GetInstance()->WaitGetNewOpenInstance();
-    if (openInstance == nullptr) {
-        FALCON_LOG(LOG_ERROR) << "new openInstance failed";
-        return -EMFILE;
-    }
     uint64_t inodeId = 0;
     int64_t size = 0;
     int32_t nodeId = 0;
@@ -177,8 +172,14 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
     }
 #endif
     if (errorCode != SUCCESS) {
-        FalconFd::GetInstance()->ReleaseOpenInstance();
         FALCON_LOG(LOG_ERROR) << "FalconOpen failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+        return errorCode;
+    }
+
+    std::shared_ptr<OpenInstance> openInstance = FalconFd::GetInstance()->WaitGetNewOpenInstance();
+    if (openInstance == nullptr) {
+        FALCON_LOG(LOG_ERROR) << "new openInstance failed";
+        return -EMFILE;
     }
     openInstance->inodeId = inodeId;
     openInstance->originalSize = size;
@@ -190,8 +191,8 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
     /******************* Fetch open meta finish ************************/
 
     /* allocate fd and handle the small file read */
-    if (errorCode == SUCCESS) {
-        if (openInstance->originalSize > 0 && openInstance->originalSize < READ_BIGFILE_SIZE &&
+    if (openInstance->originalSize > 0 ) {
+        if (openInstance->originalSize < READ_BIGFILE_SIZE &&
             (openInstance->oflags & O_ACCMODE) == O_RDONLY) {
             // For small files: read all when open
             std::shared_ptr<char> buffer;
@@ -213,10 +214,19 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
                 FalconFd::GetInstance()->ReleaseOpenInstance();
                 return ret;
             }
+        } else {
+            /* open cache file */
+            int ret = InnerFalconOpenFile(openInstance.get());
+            if (ret != 0) {
+                FALCON_LOG(LOG_ERROR) << "In FalconOpen(): call OpenFile() failed";
+                FalconFd::GetInstance()->ReleaseOpenInstance();
+                return ret;
+            }
+            openInstance->isOpened = true;
         }
-        fd = FalconFd::GetInstance()->AttachFd(path, openInstance);
     }
-    return errorCode;
+    fd = FalconFd::GetInstance()->AttachFd(path, openInstance);
+    return SUCCESS;
 }
 
 int FalconClose(const std::string &path, uint64_t fd, bool isFlush, int datasync)

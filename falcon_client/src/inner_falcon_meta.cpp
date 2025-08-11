@@ -56,3 +56,8 @@ int InnerFalconUnlink(uint64_t inodeId, int nodeId, std::string path)
 {
     return FalconStore::GetInstance()->DeleteFiles(inodeId, nodeId, path);
 }
+
+int InnerFalconOpenFile(OpenInstance *openInstance)
+{
+    return FalconStore::GetInstance()->OpenFile(openInstance);
+}

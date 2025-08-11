@@ -32,3 +32,4 @@ int InnerFalconCopydata(const std::string &srcName, const std::string &dstName);
 int InnerFalconDeleteDataAfterRename(const std::string &objectName);
 int InnerFalconTruncateOpenInstance(OpenInstance *openInstance, off_t size);
 int InnerFalconTruncateFile(OpenInstance *openInstance, off_t size);
+int InnerFalconOpenFile(OpenInstance *openInstance);
