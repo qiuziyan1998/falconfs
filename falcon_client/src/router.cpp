@@ -30,7 +30,7 @@ int Router::FetchShardTable(std::shared_ptr<Connection> conn)
     const int col = response->col();
     int lastShardMaxValue = INT32_MIN;
 
-    std::unique_lock<std::shared_mutex> lock(std::shared_mutex mapMtx);
+    std::unique_lock<std::shared_mutex> lock(mapMtx);
     auto tmpRouteMap = routeMap;
     shardTable.clear();
     routeMap.clear();

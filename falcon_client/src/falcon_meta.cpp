@@ -306,7 +306,7 @@ int FalconUnlink(const std::string &path)
         // delete data
         ret = InnerFalconUnlink(inodeId, nodeId, path);
         if (ret != 0) {
-            FALCON_LOG(LOG_ERROR) << "In FalconUnlink(): delete cache " << path << " failed";
+            FALCON_LOG(LOG_WARNING) << "In FalconUnlink(): delete cache " << path << " failed";
         }
     }
 
