@@ -338,7 +338,7 @@ int FalconStore::ReadFile(OpenInstance *openInstance, char *buf, size_t size, of
             if (StoreNode::GetInstance()->IsLocal(openInstance->nodeId)) {
                 StopPreReadThreaded(openInstance);
             } else if (!StartPreReadThreaded(openInstance)) {
-                StartPreReadThreaded(openInstance);
+                StopPreReadThreaded(openInstance);
             }
         }
 

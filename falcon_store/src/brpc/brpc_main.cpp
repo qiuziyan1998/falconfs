@@ -432,7 +432,7 @@ int RemoteIOServer::Run()
     options.use_rdma = true;
 #endif
     if (server.Start(point, &options) != 0) {
-        FALCON_LOG(LOG_ERROR) << "Fail to start EchoServer";
+        FALCON_LOG(LOG_ERROR) << "Fail to start data Server";
         return -1;
     }
 
