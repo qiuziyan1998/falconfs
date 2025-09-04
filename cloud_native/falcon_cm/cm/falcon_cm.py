@@ -261,6 +261,7 @@ class FalconCM:
                         self._cluster_leader_ip,
                         self._meta_port,
                         self._user_name,
+                        self._host_node_name,
                     )
                     self._zk_client.set(host_path, value=str.encode(""))
                     self._zk_client.create(membership_path)
@@ -277,6 +278,7 @@ class FalconCM:
                             self._user_name,
                             self._pod_ip,
                             self._meta_port,
+                            self._host_node_name,
                         )
                         self._zk_client.create(membership_path)
                     else:
@@ -285,6 +287,9 @@ class FalconCM:
                             self._cluster_leader_ip,
                             self._meta_port,
                             self._user_name,
+                            self._pod_ip,
+                            self._meta_port,
+                            self._host_node_name,
                         )
         else:
             postgresql.demote_for_start(
@@ -292,6 +297,7 @@ class FalconCM:
                 self._cluster_leader_ip,
                 self._meta_port,
                 self._user_name,
+                self._host_node_name,
             )
         self._zk_client.create(replica_path, ephemeral=True)
         self.watch_leader_and_candidates()
@@ -508,22 +514,25 @@ class FalconCM:
                 time.sleep(1)
             self.logger.info("--update the node table successfully--")
         else:
+            try:
+                self._zk_client.delete(
+                    "{}/{}/membership/{}".format(
+                        self._cluster_path, self._cluster_name, self._host_node_name
+                    )
+                )
+            except NoNodeError:
+                pass
             if postgresql.is_standby(self._pgdata_dir):
                 postgresql.change_following_leader(
                     self._pgdata_dir,
                     self._cluster_leader_ip,
                     self._meta_port,
                     self._user_name,
+                    self._pod_ip,
+                    self._meta_port,
+                    self._host_node_name,
                 )
             else:
-                try:
-                    self._zk_client.delete(
-                        "{}/{}/membership/{}".format(
-                            self._cluster_path, self._cluster_name, self._host_node_name
-                        )
-                    )
-                except NoNodeError:
-                    pass
                 postgresql.do_demote(
                     self._pgdata_dir,
                     self._cluster_leader_ip,
@@ -531,12 +540,13 @@ class FalconCM:
                     self._user_name,
                     self._pod_ip,
                     self._meta_port,
+                    self._host_node_name,
                 )
-                self._zk_client.create(
-                    "{}/{}/membership/{}".format(
-                        self._cluster_path, self._cluster_name, self._host_node_name
-                    )
+            self._zk_client.create(
+                "{}/{}/membership/{}".format(
+                    self._cluster_path, self._cluster_name, self._host_node_name
                 )
+            )
         self._is_changing = False
 
     def handle_candidate_change_event(self, candidates):
@@ -837,6 +847,12 @@ class FalconCM:
                             pass
                     self._zk_client.delete(host_nodes_path + "/" + name)
                     self._zk_client.delete(host_membership_path + "/" + name)
+                    postgresql.clear_replication_slot(
+                        self._cluster_leader_ip,
+                        self._meta_port,
+                        self._user_name,
+                        name,
+                    )
                     del self._lost_node_time[name]
             isCheckStatus = False
         return isCheckStatus
