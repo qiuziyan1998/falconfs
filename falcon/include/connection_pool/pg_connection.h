@@ -13,7 +13,7 @@
 #include <thread>
 #include <vector>
 #include <memory>
-#include "concurrentqueue/concurrentqueue.h"
+#include "concurrentqueue/blockingconcurrentqueue.h"
 #include "connection_pool/pg_connection_pool.h"
 #include "libpq-fe.h"
 #include "remote_connection_utils/serialized_data.h"
@@ -30,7 +30,7 @@ class PGConnection {
     SerializedData replyBuilder;
 
     std::shared_ptr<WorkerTask> taskToExec;
-    moodycamel::ConcurrentQueue<std::shared_ptr<WorkerTask>> tasksToExec;
+    moodycamel::BlockingConcurrentQueue<std::shared_ptr<WorkerTask>> tasksToExec;
     std::thread thread;
 
   public:

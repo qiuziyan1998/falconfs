@@ -43,14 +43,7 @@ void PGConnection::BackgroundWorker()
     while (working) {
         if (!working)
             break;
-        int queueSizeApprox = this->tasksToExec.size_approx();
-        if (queueSizeApprox == 0) {
-            std::this_thread::sleep_for(std::chrono::microseconds(20));
-            continue;
-        }
-        while (!this->tasksToExec.try_dequeue(taskToExec)) {
-            std::this_thread::sleep_for(std::chrono::microseconds(1));
-        }
+        this->tasksToExec.wait_dequeue(taskToExec);
 
         // 1. Reset status and check validity of input
         PGresult *res;
