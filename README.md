@@ -55,12 +55,12 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
     <font size="5">
         <b>Throughput of File data IO.</b>
     </font>
-    <br>We evaluate the performance of accessing small files with different file sizes. As shown in following figures, Y-axis is the throughput normalized to that of FalconFS. Thanks to FalconFS's higher metadata performance, it outperforms other DFSs in small file access. For files no larger than 64 KB, FalconFS achieves 7.35--21.23x speedup over CephFS, 0.86--24.87x speedup over JuiceFS and 1.12--1.85x speedup over Lustre. For files whose size is larger than 256 KiB, the performance of FalconFS is bounded by the aggregated SSD bandwidth. 
+    <br>We evaluate the performance of accessing small files with different file sizes. As shown in following figures, Y-axis is the throughput normalized to that of FalconFS. Thanks to FalconFS's higher metadata performance, it outperforms other DFSs in small file access. For files no larger than 64 KB, FalconFS achieves 7.35--21.23x speedup over CephFS, 2.94--23.53× speedup over JuiceFS and 1.12--1.85x speedup over Lustre. For files whose size is larger than 256 KiB, the performance of FalconFS is bounded by the aggregated SSD bandwidth. 
 </div>
 
-<img width="371" height="20" alt="image" src="https://github.com/user-attachments/assets/de6dfbfb-748f-4c40-82b5-cb162a162725" />
-<img width="575" height="212" alt="image" src="https://github.com/user-attachments/assets/42203769-1e28-4f63-a55a-55d7dd3e6103" />
-<img width="575" height="212" alt="image" src="https://github.com/user-attachments/assets/65a19cec-f0e4-4fae-81fb-943932e08f80" />
+<img width="500" height="20" alt="image" src="https://github.com/user-attachments/assets/de6dfbfb-748f-4c40-82b5-cb162a162725" />
+<img width="700" height="250" alt="image" src="https://github.com/user-attachments/assets/42203769-1e28-4f63-a55a-55d7dd3e6103" />
+<img width="700" height="250" alt="image" src="https://github.com/user-attachments/assets/65a19cec-f0e4-4fae-81fb-943932e08f80" />
 
 <br>
 
