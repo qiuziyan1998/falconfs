@@ -59,8 +59,8 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
 </div>
 
 <img width="600" height="40" alt="image" src="https://github.com/user-attachments/assets/de6dfbfb-748f-4c40-82b5-cb162a162725" />
-<img width="800" height="300" alt="read" src="https://github.com/user-attachments/assets/878927cb-a86a-4cdc-a44c-ec5cd60205b1" />
-<img width="800" height="300" alt="image" src="https://github.com/user-attachments/assets/5d9847bf-51fb-4165-8574-d31a15d67c7e" />
+<img width="800" height="300" alt="read" src="https://github.com/user-attachments/assets/dac6ce3b-de08-41dc-920d-1ed9ce2caf43" />
+<img width="800" height="300" alt="write" src="https://github.com/user-attachments/assets/5d9847bf-51fb-4165-8574-d31a15d67c7e" />
 
 <br>
 
