@@ -39,7 +39,7 @@ Through the above advantages, FalconFS delivers an ideal storage solution for mo
 
 We conduct the experiments in a cluster of 13 dual-socket machines, whose configuration is shown above. To better simulate large scale deployment in data centers, we have the following setups:
 - First, to expand the test scale, we abstract each machine into two nodes, with each node bound to one socket, one SSD, and one NIC, scaling up the testbed to 26 nodes.
-- Second, to simulate the resource ratio in real deployment, we reduce the server resources to 4 cores per node. So that we can generate sufficient load to stress the servers with a few client nodes.
+- Second, to simulate the resource ratio in real deployment, we set the server resources to 4 cores per node, so as to saturate the servers with a limited number of client nodes.
 In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS instance and saturate them with 10 client nodes. All DFSs do not enable metadata or data replication.
 
 **Compared Systems:**
