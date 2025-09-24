@@ -39,9 +39,7 @@ Through the above advantages, FalconFS delivers an ideal storage solution for mo
 
 We conduct the experiments in a cluster of 13 dual-socket machines, whose configuration is shown above. To better simulate large scale deployment in data centers, we have the following setups:
 - First, to expand the test scale, we abstract each machine into two nodes, with each node bound to one socket, one SSD, and one NIC, scaling up the testbed to 26 nodes.
-- Second, to simulate the resource ratio in real deployment, we reduce the server resources to 4 cores per node. So that we can:
-  - generate sufficient load to stress the servers with a few client nodes.
-  - correctly simulate the 4:1 ratio between CPU cores and NVMe SSDs in typical real deployments.
+- Second, to simulate the resource ratio in real deployment, we reduce the server resources to 4 cores per node. So that we can generate sufficient load to stress the servers with a few client nodes.
 In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS instance and saturate them with 10 client nodes. All DFSs do not enable metadata or data replication.
 
 **Compared Systems:**
@@ -66,9 +64,9 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
 
 <div style="text-align: center;">
     <font size="5">
-        <b>MLPerf ResNet-50 Training Storage Benchmark.</b>
+        <b>ResNet-50 Model Training.</b>
     </font>
-    <br> We simulate training ResNet-50 model on a dataset containing 10 million files, each file contains one 131 KB object, which is a typical scenario for deep learning model training in production. MLPerf has been modified to avoid merging small files into large ones, simulating real-world business scenarios while reducing the overhead associated with merge and copy operations. Taking 90% accelerator utilization as the threshold, FalconFS supports up to 80 accelerators while Lustre can only support 32 accelerators on the experiment hardware.
+    <br> We use MLPerf storage benchmark to simulate training ResNet-50 model on a dataset containing 10 million files under 1 million directories, with each file sized at 112 KiB, which is a typical scenario for deep learning model training in production. Taking 90% accelerator utilization as the threshold, FalconFS supports up to 80 accelerators while Lustre can only support 32 accelerators on the experiment hardware. The MLPerf benchmark is rewritten using C++ to provide higher concurrency, allowing for saturating the servers with a limited number of client machines.
 </div>
 
 ![mlperf](https://github.com/user-attachments/assets/30f4e24f-a933-49b8-8163-306b1c45e3c0)
