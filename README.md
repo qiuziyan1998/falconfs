@@ -39,9 +39,7 @@ Through the above advantages, FalconFS delivers an ideal storage solution for mo
 
 We conduct the experiments in a cluster of 13 dual-socket machines, whose configuration is shown above. To better simulate large scale deployment in data centers, we have the following setups:
 - First, to expand the test scale, we abstract each machine into two nodes, with each node bound to one socket, one SSD, and one NIC, scaling up the testbed to 26 nodes.
-- Second, to simulate the resource ratio in real deployment, we reduce the server resources to 4 cores per node. So that we can:
-  - generate sufficient load to stress the servers with a few client nodes.
-  - correctly simulate the 4:1 ratio between CPU cores and NVMe SSDs in typical real deployments.
+- Second, to simulate the resource ratio in real deployment, we set the server resources to 4 cores per node, so as to saturate the servers with a limited number of client nodes.
 In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS instance and saturate them with 10 client nodes. All DFSs do not enable metadata or data replication.
 
 **Compared Systems:**
@@ -55,18 +53,20 @@ In the experiments below, we run 4 metadata nodes and 12 data nodes for each DFS
     <font size="5">
         <b>Throughput of File data IO.</b>
     </font>
-    <br>We evaluate the performance of accessing small files with different file sizes. As shown in following figures, Y-axis is the throughput normalized to that of FalconFS. Thanks to FalconFS's higher metadata performance, it outperforms other DFSs in small file access. For files no larger than 64 KB, FalconFS achieves 7.35--21.23x speedup over CephFS, 0.86--24.87x speedup over JuiceFS and 1.12--1.85x speedup over Lustre. For files whose size is larger than 256 KiB, the performance of FalconFS is bounded by the aggregated SSD bandwidth. 
+    <br>We evaluate the performance of accessing small files with different file sizes. As shown in following figures, Y-axis is the throughput normalized to that of FalconFS. Thanks to FalconFS's higher metadata performance, it outperforms other DFSs in small file access. For files no larger than 64 KB, FalconFS achieves 7.35--21.23x speedup over CephFS, 2.94--23.53× speedup over JuiceFS and 1.12--1.85x speedup over Lustre. For files whose size is larger than 256 KiB, the performance of FalconFS is bounded by the aggregated SSD bandwidth. 
 </div>
 
-![read-throughput](https://github.com/user-attachments/assets/c22f1e42-5a55-4f82-b08c-908cdc8aca4d)
-![write-throughput](https://github.com/user-attachments/assets/73f73b19-1664-4c72-a712-592afbc931d6)
+<img width="600" height="40" alt="image" src="https://github.com/user-attachments/assets/de6dfbfb-748f-4c40-82b5-cb162a162725" />
+<img width="800" height="300" alt="read" src="https://github.com/user-attachments/assets/dac6ce3b-de08-41dc-920d-1ed9ce2caf43" />
+<img width="800" height="300" alt="write" src="https://github.com/user-attachments/assets/5d9847bf-51fb-4165-8574-d31a15d67c7e" />
+
 <br>
 
 <div style="text-align: center;">
     <font size="5">
-        <b>MLPerf ResNet-50 Training Storage Benchmark.</b>
+        <b>ResNet-50 Model Training.</b>
     </font>
-    <br> We simulate training ResNet-50 model on a dataset containing 10 million files, each file contains one 131 KB object, which is a typical scenario for deep learning model training in production. MLPerf has been modified to avoid merging small files into large ones, simulating real-world business scenarios while reducing the overhead associated with merge and copy operations. Taking 90% accelerator utilization as the threshold, FalconFS supports up to 80 accelerators while Lustre can only support 32 accelerators on the experiment hardware.
+    <br> We use MLPerf storage benchmark to simulate training ResNet-50 model on a dataset containing 10 million files under 1 million directories, with each file sized at 112 KiB, which is a typical scenario for deep learning model training in production. Taking 90% accelerator utilization as the threshold, FalconFS supports up to 80 accelerators while Lustre can only support 32 accelerators on the experiment hardware. The MLPerf benchmark is rewritten using C++ to provide higher concurrency, allowing for saturating the servers with a limited number of client machines.
 </div>
 
 ![mlperf](https://github.com/user-attachments/assets/30f4e24f-a933-49b8-8163-306b1c45e3c0)
