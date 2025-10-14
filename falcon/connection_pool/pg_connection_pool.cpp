@@ -15,18 +15,27 @@ void PGConnectionPool::BackgroundPoolManager()
     while (working) {
         if (!working) break;
 
-        size_t maxCount = 0;
-        for (int i = 0; i <= TaskSupportBatchType::NOT_SUPPORT; ++i) {
-            int queueSizeApprox = supportBatchTaskList[i].task->jobList.size_approx();
-            if (queueSizeApprox == 0)
-                continue;
-            size_t count = 0;
-            if (i < TaskSupportBatchType::NOT_SUPPORT) {
-                count = BatchDequeueExec(i, queueSizeApprox);
-            } else {
-                count = SingleDequeueExec(queueSizeApprox, notSupportTasks);
+        int maxCount = 0;
+        bool withTasks = true;
+        while (withTasks) {
+            int emptyCount = 0;
+            for (int i = 0; i <= TaskSupportBatchType::NOT_SUPPORT; ++i) {
+                int queueSizeApprox = supportBatchTaskList[i].task->jobList.size_approx();
+                if (queueSizeApprox == 0) {
+                    emptyCount++;
+                    continue;
+                }
+                maxCount = std::max(maxCount, queueSizeApprox);
+                int toDequeue = std::min(queueSizeApprox, FalconConnectionPoolBatchSize);
+                if (i < TaskSupportBatchType::NOT_SUPPORT) {
+                    BatchDequeueExec(toDequeue, i);
+                } else {
+                    SingleDequeueExec(toDequeue, notSupportTasks);
+                }
             }
-            maxCount = std::max(maxCount, count);
+            if (emptyCount == TaskSupportBatchType::NOT_SUPPORT + 1) {
+                withTasks = false;
+            }
         }
         // determine the amount to batch
         waitTime = AdjustWaitTime(waitTime, maxCount);
@@ -34,60 +43,52 @@ void PGConnectionPool::BackgroundPoolManager()
     }
 }
 
-int PGConnectionPool::AdjustWaitTime(int prevTime, size_t ReqInLoop)
+int PGConnectionPool::AdjustWaitTime(int prevTime, size_t reqInLoop)
 {
     if (FalconConnectionPoolWaitAdjust == 0) {
         return prevTime;
     }
-    if (ReqInLoop <= size_t(FalconConnectionPoolBatchSize * 2)) {
+    if (reqInLoop <= size_t(FalconConnectionPoolBatchSize * 2)) {
         return std::min(prevTime * 2, FalconConnectionPoolWaitMax);
     } else {
         return std::max(prevTime / 2, FalconConnectionPoolWaitMin);
     }
 }
 
-int PGConnectionPool::BatchDequeueExec(int queueIndex, int num)
+int PGConnectionPool::BatchDequeueExec(int toDequeue, int queueIndex)
 {
-    int actualDequeueNum = 0;
-    while (num > 0) {
-        int toDequeue = std::min(num, FalconConnectionPoolBatchSize);
-        auto taskVecPtr = std::make_shared<WorkerTask>();
-        taskVecPtr->isBatch = true;
-        taskVecPtr->jobList.reserve(toDequeue);
-        int count = supportBatchTaskList[queueIndex].task->jobList.try_dequeue_bulk(
-            std::back_inserter(taskVecPtr->jobList), 
-            toDequeue
-        );
-        if (count == 0) break;
-        actualDequeueNum += count;
-        PGConnection *conn = GetPGConnection(); // get idle connection, may block
-        conn->Exec(taskVecPtr);
-        num -= count;
+    auto taskVecPtr = std::make_shared<WorkerTask>();
+    taskVecPtr->isBatch = true;
+    taskVecPtr->jobList.reserve(toDequeue);
+    int count = supportBatchTaskList[queueIndex].task->jobList.try_dequeue_bulk(
+        std::back_inserter(taskVecPtr->jobList), 
+        toDequeue
+    );
+    if (count == 0) {
+        return 0;
     }
-    return actualDequeueNum;
+    PGConnection *conn = GetPGConnection(); // get idle connection, may block
+    conn->Exec(taskVecPtr);
+    return count;
 }
 
-int PGConnectionPool::SingleDequeueExec(int num, std::vector<falcon::meta_proto::AsyncMetaServiceJob *> &tasksContainer)
+int PGConnectionPool::SingleDequeueExec(int toDequeue, std::vector<falcon::meta_proto::AsyncMetaServiceJob *> &tasksContainer)
 {
-    int actualDequeueNum = 0;
-    while (num > 0) {
-        int toDequeue = std::min(num, FalconConnectionPoolBatchSize);
-        tasksContainer.clear();
-        size_t count = supportBatchTaskList[TaskSupportBatchType::NOT_SUPPORT].task->jobList.try_dequeue_bulk(
-            std::back_inserter(tasksContainer), 
-            toDequeue
-        );
-        if (count == 0) break;
-        actualDequeueNum += count;
-        PGConnection *conn = GetPGConnection();
-        for (auto &e : tasksContainer) {
-            auto taskVecPtr = std::make_shared<WorkerTask>();
-            taskVecPtr->jobList.emplace_back(e);
-            conn->Exec(taskVecPtr);
-        }
-        num -= count;
+    tasksContainer.clear();
+    size_t count = supportBatchTaskList[TaskSupportBatchType::NOT_SUPPORT].task->jobList.try_dequeue_bulk(
+        std::back_inserter(tasksContainer), 
+        toDequeue
+    );
+    if (count == 0) {
+        return 0;
     }
-    return actualDequeueNum;
+    for (auto &e : tasksContainer) {
+        PGConnection *conn = GetPGConnection();
+        auto taskVecPtr = std::make_shared<WorkerTask>();
+        taskVecPtr->jobList.emplace_back(e);
+        conn->Exec(taskVecPtr);
+    }
+    return count;
 }
 
 PGConnectionPool::PGConnectionPool(const uint16_t port,

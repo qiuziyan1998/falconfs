@@ -85,11 +85,11 @@ class PGConnectionPool {
 
     void Stop();
 
-    int BatchDequeueExec(int queueIndex, int num);
+    int BatchDequeueExec(int toDequeue, int queueIndex);
 
-    int SingleDequeueExec(int num, std::vector<falcon::meta_proto::AsyncMetaServiceJob *> &tasksContainer);
+    int SingleDequeueExec(int toDequeue, std::vector<falcon::meta_proto::AsyncMetaServiceJob *> &tasksContainer);
 
-    int AdjustWaitTime(int prevTime, size_t ReqInLoop);
+    int AdjustWaitTime(int prevTime, size_t reqInLoop);
 };
 
 #endif
