@@ -327,8 +327,7 @@ void PGConnection::BackgroundWorker()
         // TBD
         //
         //
-
-        this->parent->ReaddWorkingPGConnection(this);
+        this->parent->ReaddWorkingPGConnection(this, taskToExec->isReadOnly);
         for (size_t i = 0; i < taskToExec->jobList.size(); ++i)
             delete taskToExec->jobList[i];
         

@@ -15,6 +15,7 @@
 #include <memory>
 #include <atomic>
 #include <iostream>
+#include "concurrentqueue/blockingconcurrentqueue.h"
 #include "connection_pool/task.h"
 
 #define INIT_CONNECTIONS 10
@@ -30,6 +31,7 @@ class PGConnectionPool {
     std::queue<PGConnection *> connPool;
     std::mutex connPoolMutex;
     std::condition_variable cvPoolNotEmpty;
+    moodycamel::BlockingConcurrentQueue<PGConnection *> connPoolReadOnly, connPoolWriteOnly;
 
     std::queue<Task *> pendingTask;
     std::mutex pendingTaskMutex;
@@ -68,7 +70,7 @@ class PGConnectionPool {
 
     std::thread backgroundPoolManager;
 
-    PGConnection *GetPGConnection();
+    PGConnection *GetPGConnection(bool isReadOnly);
     void BackgroundPoolManager();
 
   public:
@@ -79,7 +81,9 @@ class PGConnectionPool {
                      const uint16_t batchTaskBufferMaxSize);
     ~PGConnectionPool();
 
-    void ReaddWorkingPGConnection(PGConnection *conn);
+    static bool IsReadOnly(int opType);
+
+    void ReaddWorkingPGConnection(PGConnection *conn, bool isReadOnly);
 
     void DispatchAsyncMetaServiceJob(falcon::meta_proto::AsyncMetaServiceJob *job);
 

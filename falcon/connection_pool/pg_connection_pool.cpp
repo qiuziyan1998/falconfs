@@ -7,6 +7,11 @@
 #include "connection_pool/pg_connection.h"
 #include "connection_pool/connection_pool_config.h"
 
+bool PGConnectionPool::IsReadOnly(int opType)
+{
+    return opType == TaskSupportBatchType::STAT || opType == TaskSupportBatchType::OPEN;
+}
+
 void PGConnectionPool::BackgroundPoolManager()
 {
     std::vector<falcon::meta_proto::AsyncMetaServiceJob *> notSupportTasks;
@@ -57,8 +62,7 @@ int PGConnectionPool::AdjustWaitTime(int prevTime, size_t reqInLoop)
 
 int PGConnectionPool::BatchDequeueExec(int toDequeue, int queueIndex)
 {
-    auto taskVecPtr = std::make_shared<WorkerTask>();
-    taskVecPtr->isBatch = true;
+    auto taskVecPtr = std::make_shared<WorkerTask>(true, IsReadOnly(queueIndex));
     taskVecPtr->jobList.reserve(toDequeue);
     int count = supportBatchTaskList[queueIndex].task->jobList.try_dequeue_bulk(
         std::back_inserter(taskVecPtr->jobList), 
@@ -67,7 +71,7 @@ int PGConnectionPool::BatchDequeueExec(int toDequeue, int queueIndex)
     if (count == 0) {
         return 0;
     }
-    PGConnection *conn = GetPGConnection(); // get idle connection, may block
+    PGConnection *conn = GetPGConnection(taskVecPtr->isReadOnly); // get idle connection, may block
     conn->Exec(taskVecPtr);
     return count;
 }
@@ -83,8 +87,9 @@ int PGConnectionPool::SingleDequeueExec(int toDequeue, std::vector<falcon::meta_
         return 0;
     }
     for (auto &e : tasksContainer) {
-        PGConnection *conn = GetPGConnection();
-        auto taskVecPtr = std::make_shared<WorkerTask>();
+        bool isReadOnly = false;
+        PGConnection *conn = GetPGConnection(isReadOnly);
+        auto taskVecPtr = std::make_shared<WorkerTask>(false, isReadOnly);
         taskVecPtr->jobList.emplace_back(e);
         conn->Exec(taskVecPtr);
     }
@@ -100,7 +105,12 @@ PGConnectionPool::PGConnectionPool(const uint16_t port,
     for (int i = 0; i < connPoolSize; ++i) {
         PGConnection *conn = new PGConnection(this, "127.0.0.1", port, userName);
         currentManagedConn.insert(conn);
-        connPool.push(conn);
+        while (!connPoolReadOnly.enqueue(conn)) {}
+    }
+    for (int i = 0; i < connPoolSize; ++i) {
+        PGConnection *conn = new PGConnection(this, "127.0.0.1", port, userName);
+        currentManagedConn.insert(conn);
+        while (!connPoolWriteOnly.enqueue(conn)) {}
     }
     this->pendingTaskBufferMaxSize = pendingTaskBufferMaxSize;
     this->batchTaskBufferMaxSize = batchTaskBufferMaxSize;
@@ -114,24 +124,28 @@ PGConnectionPool::PGConnectionPool(const uint16_t port,
     backgroundPoolManager = std::thread(&PGConnectionPool::BackgroundPoolManager, this);
 }
 
-void PGConnectionPool::ReaddWorkingPGConnection(PGConnection *conn)
+void PGConnectionPool::ReaddWorkingPGConnection(PGConnection *conn, bool isReadOnly)
 {
-    {
-        std::unique_lock<std::mutex> lk(connPoolMutex);
-        connPool.push(conn);
+    if (isReadOnly) {
+        while (!connPoolReadOnly.enqueue(conn)) {
+            std::cout << "ReaddWorkingPGConnection: ReadOnly: enqueue failed" << std::endl;
+            std::this_thread::yield();
+        }
+    } else {
+        while (!connPoolWriteOnly.enqueue(conn)) {
+            std::cout << "ReaddWorkingPGConnection: WriteOnly: enqueue failed" << std::endl;
+            std::this_thread::yield();
+        }
     }
-    cvPoolNotEmpty.notify_one();
 }
 
-PGConnection *PGConnectionPool::GetPGConnection()
+PGConnection *PGConnectionPool::GetPGConnection(bool isReadOnly)
 {
     PGConnection *result = NULL;
-    {
-        std::unique_lock<std::mutex> lk(connPoolMutex);
-        cvPoolNotEmpty.wait(lk, [this]() -> bool { return !this->connPool.empty(); });
-
-        result = connPool.front();
-        connPool.pop();
+    if (isReadOnly) {
+        connPoolReadOnly.wait_dequeue(result);
+    } else {
+        connPoolWriteOnly.wait_dequeue(result);
     }
     return result;
 }

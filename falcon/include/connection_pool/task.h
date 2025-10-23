@@ -52,9 +52,11 @@ class Task {
 
 class WorkerTask {
   public:
-    bool isBatch;
+    bool isBatch = false;
+    bool isReadOnly = false;
     std::vector<falcon::meta_proto::AsyncMetaServiceJob *> jobList;
-    WorkerTask() { isBatch = false; }
+    WorkerTask() {}
+    WorkerTask(bool batch, bool readOnly) : isBatch(batch), isReadOnly(readOnly) {}
 };
 
 #endif
