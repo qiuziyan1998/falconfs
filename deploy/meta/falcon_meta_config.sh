@@ -4,7 +4,7 @@ cnIp='127.0.0.1'
 workerIpList=('127.0.0.1')
 workerNumList=(1)
 
-uniquePortPrefix=555
+uniquePortPrefix=586
 cnPortPrefix=${uniquePortPrefix}0
 cnPoolerPortPrefix=${uniquePortPrefix}1
 workerPortPrefix=${uniquePortPrefix}2

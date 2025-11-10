@@ -8,7 +8,7 @@ source "$DIR/falcon_client_config.sh"
     echo "Error: Build directory not found" >&2
     exit 1
 }
-
+echo "MNT_PATH = $MNT_PATH"
 # 检查是否已挂载
 if mount | grep -q "$MNT_PATH"; then
     echo "$MNT_PATH is already mounted"

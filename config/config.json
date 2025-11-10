@@ -1,9 +1,9 @@
 {
     "main": {
-        "falcon_log_dir": "/tmp",
+        "falcon_log_dir": "/home/qzy/falconfs/log",
         "falcon_log_level": "WARNING",
         "falcon_log_max_size_mb": 10,
-        "falcon_cache_root": "/tmp/falcon_cache",
+        "falcon_cache_root": "/home/qzy/falcon_cache",
         "falcon_dir_num": 101,
         "falcon_block_size": 524288,
         "falcon_read_big_file_size": 2097152,
@@ -13,7 +13,7 @@
         "falcon_cluster_view": ["127.0.0.1:56039", "0.0.0.0:56039"],
         "falcon_thread_num": 50,
         "falcon_server_ip": "127.0.0.1",
-        "falcon_server_port": "55510",
+        "falcon_server_port": "58610",
         "falcon_async": false,
         "falcon_persist": false,
         "falcon_eviction": 0.1,
