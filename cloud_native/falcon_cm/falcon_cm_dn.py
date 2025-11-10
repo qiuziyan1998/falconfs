@@ -17,10 +17,19 @@ def main():
     falcon_cm.init_sys()
     is_leader = falcon_cm.leader_select()
     if is_leader:
+        # both become leader by preemption, should manually start some leader services
         if not falcon_cm.is_sys_ready():
+            # init, init_filesystem will flush cn table later
+            # leader can watch_leader_and_candidates for later election (any need?)
             falcon_cm.watch_leader_and_candidates()
-        falcon_cm.watch_replicas()
+
+            # wait until all replicas inited by write_replica(), to fill local cache
+            self.wait_until_replicas_nodes_ready()
+            # leader should watch_replicas_and_update_cn_table, no need to flush, init_filesystem will flush leader and followers
+            self.watch_replicas_and_update_cn_table(False)
+        # in restart, watch_leader_and_candidates will flush leader, and flush followers in watch_replicas_and_update_cn_table(True)
     else:
+        # here follower will watch_leader_and_candidates() for later election
         falcon_cm.write_replica()
     falcon_cm.watch_conn()
     if has_falcon_stor:

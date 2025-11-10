@@ -12,8 +12,11 @@ else
     echo "listen_addresses='*'" >>/home/falconMeta/data/metadata/postgresql.conf
     echo "wal_level=logical" >>/home/falconMeta/data/metadata/postgresql.conf
     echo "max_wal_senders=10" >>/home/falconMeta/data/metadata/postgresql.conf
+    echo "wal_sender_timeout=300s" >>/home/falconMeta/data/metadata/postgresql.conf
+    echo "wal_receiver_timeout=300s" >>/home/falconMeta/data/metadata/postgresql.conf
     echo "hot_standby=on" >>/home/falconMeta/data/metadata/postgresql.conf
-    echo "synchronous_commit=on" >>/home/falconMeta/data/metadata/postgresql.conf
+    # echo "synchronous_commit=on" >>/home/falconMeta/data/metadata/postgresql.conf
+    echo "synchronous_commit=remote_apply" >>/home/falconMeta/data/metadata/postgresql.conf
 
     # default replica_server_num set to 2, compatible to ADS.
     replica_server_num=${replica_server_num:-2}

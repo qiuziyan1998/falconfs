@@ -37,6 +37,8 @@ class FalconCM:
         self._cn_list = []
         self._dn_list = []
         self._cluster_names = []
+        self._cluster_id = -1
+        self._cached_cluster_info = []
 
         self._pgdata_dir = self._data_dir + "/metadata"
 
@@ -150,55 +152,67 @@ class FalconCM:
             )
 
     def leader_select(self):
-        node_info = "{}:{}".format(self._pod_ip, self._meta_port)
         # find the cluster for the node
         self.find_node_cluster()
+
+        node_info = "{}:{}".format(self._pod_ip, self._meta_port)
         leader_path = "{}/{}".format(self._leader_path, self._cluster_name)
         last_leader_path = "{}/{}/lastLeader".format(
             self._cluster_path, self._cluster_name
         )
         if self._zk_client.exists(self._root_path + "/ready"):
-            last_leader, _ = self._zk_client.get(last_leader_path)
-            last_leader = last_leader.decode("utf-8")
-            if last_leader == self._host_node_name:
-                time.sleep(10)
-                self.watch_leader_and_candidates()
-                try:
-                    self._zk_client.create(
-                        leader_path, value=str.encode(node_info), ephemeral=True
-                    )
-                    self._zk_client.set(
-                        last_leader_path, value=str.encode(self._host_node_name)
-                    )
-                    self._cluster_leader_ip = self._pod_ip
-                    self._is_leader = True
-                except NodeExistsError:
-                    self._is_leader = False
-            else:
+            # restart
+            leader_select_restart(node_info, leader_path, last_leader_path)
+        else:
+            # first run, init
+            leader_select_init(node_info, leader_path)
+        return self._is_leader
+
+    # The first to create /leader becomes the leader
+    def leader_select_init(self, node_info, leader_path):
+        if self._zk_client.exists(leader_path):
+            self._is_leader = False
+        else:
+            try:
+                self._zk_client.create(
+                    leader_path, value=str.encode(node_info), ephemeral=True
+                )
+                self._cluster_leader_ip = self._pod_ip
+                self._is_leader = True
+                if self._is_cn:
+                    self.init_all_path()
+                self._zk_client.set(
+                    last_leader_path, value=str.encode(self._host_node_name)
+                )
+            except NodeExistsError:
+                self._is_leader = False
+            except Exception as e:
+                self.logger.error(
+                    "Failed to set the leader for the node: {}".format(e)
+                )
+                self._is_leader = False
+
+    def leader_select_restart(self, node_info, leader_path, last_leader_path):
+        last_leader, _ = self._zk_client.get(last_leader_path)
+        last_leader = last_leader.decode("utf-8")
+        if last_leader == self._host_node_name:
+            # be leader in last run, election not started, wait until ephemeral node expire
+            time.sleep(10)
+            self.watch_leader_and_candidates()
+            # leader may exist or not, watch leader create event
+            try:
+                self._zk_client.create(
+                    leader_path, value=str.encode(node_info), ephemeral=True
+                )
+                self._zk_client.set(
+                    last_leader_path, value=str.encode(self._host_node_name)
+                )
+                self._cluster_leader_ip = self._pod_ip
+                self._is_leader = True
+            except NodeExistsError:
                 self._is_leader = False
         else:
-            if self._zk_client.exists(leader_path):
-                self._is_leader = False
-            else:
-                try:
-                    self._zk_client.create(
-                        leader_path, value=str.encode(node_info), ephemeral=True
-                    )
-                    self._cluster_leader_ip = self._pod_ip
-                    self._is_leader = True
-                    if self._is_cn:
-                        self.init_all_path()
-                    self._zk_client.set(
-                        last_leader_path, value=str.encode(self._host_node_name)
-                    )
-                except NodeExistsError:
-                    self._is_leader = False
-                except Exception as e:
-                    self.logger.error(
-                        "Failed to set the leader for the node: {}".format(e)
-                    )
-                    self._is_leader = False
-        return self._is_leader
+            self._is_leader = False
 
     def write_replica(self):
         """write the replica for the node"""
@@ -324,6 +338,7 @@ class FalconCM:
         visited_cluster = []
         found_cluster = False
         if self._zk_client.exists(self._root_path + "/ready"):
+            # restart
             # the cluster is ready, find the cluster name
             clusters_info = self._zk_client.get_children(self._cluster_path)
             for cluster in clusters_info:
@@ -418,11 +433,14 @@ class FalconCM:
             # if state == None and event == None:
             #     self.handle_leader_delete_event()
             if event:
+                # 1. old leader deleted
                 if event.type == EventType.DELETED:
                     self.handle_leader_delete_event()
+                # 3. new leaders elected
                 elif event.type == EventType.CREATED:
                     self.handle_leader_create_event()
 
+        # 2. candidate created
         @self._zk_client.ChildrenWatch(candidates_path)
         def watch_candidates(candidates):
             self.handle_candidate_change_event(candidates)
@@ -471,15 +489,18 @@ class FalconCM:
             child_path = "{}/{}".format(candidate_path, candidate)
             self._zk_client.delete(child_path)
 
+    # Leader will update whole group to cn table, watch /replicas
     def handle_leader_create_event(self):
         leader_path = "{}/{}".format(self._leader_path, self._cluster_name)
         data, _ = self._zk_client.get(leader_path)
         ip_port = data.decode("utf-8")
         leader_ip, _ = ip_port.split(":", 1)
+        # in theory candidates alreay deleted by leader
         try:
             self.delete_candidates()
         except Exception:
             pass
+        # in theory replicas alreay deleted by leader
         try:
             self._zk_client.delete(
                 "{}/{}/replicas/{}".format(
@@ -496,7 +517,6 @@ class FalconCM:
         if leader_ip == self._pod_ip:
             if self._is_cn:
                 self.watch_need_supplement()
-            self.watch_replicas()
             if postgresql.is_standby(self._pgdata_dir):
                 postgresql.do_promote(
                     self._pgdata_dir, self._pod_ip, self._meta_port, self._user_name
@@ -512,25 +532,11 @@ class FalconCM:
                     break
                 time.sleep(1)
             self.logger.info("--update background service successfully--")
-            cn_leader_ip = self.get_cn_leader()
-            ret = False
-            while not ret:
-                self.logger.info("--update the node table--")
-                ret = postgresql.update_node_table(
-                    cn_leader_ip,
-                    self._meta_port,
-                    self._user_name,
-                    self._cluster_id,
-                    self._cluster_leader_ip,
-                    self._meta_port,
-                )
-                postgresql.reload_foreign_server_cache(
-                    cn_leader_ip, self._meta_port, self._user_name
-                )
-                if ret:
-                    break
-                cn_leader_ip = self.get_cn_leader()
-                time.sleep(1)
+            # update leader row in cn table
+            self.update_cn_node_table_leader(self._cluster_id * (1 + self._replica_server_num))
+            # First call will flush all servers in cluster to cn table
+            # Then watch /replicas changes to update cn table
+            self.watch_replicas_and_update_cn_table(True)
             self.logger.info("--update the node table successfully--")
         else:
             try:
@@ -566,7 +572,30 @@ class FalconCM:
                     self._cluster_path, self._cluster_name, self._host_node_name
                 )
             )
+            # follower do not need to change anything in cn
         self._is_changing = False
+
+    def update_cn_node_table_leader(server_id):
+        cn_leader_ip = self.get_cn_leader()
+        ret = False
+        while not ret:
+            self.logger.info("--update the node table--")
+            ret = postgresql.update_node_table(
+                cn_leader_ip,               # cn database ip
+                self._meta_port,            # cn database port
+                self._user_name,            # cn database user
+                server_id,
+                self._pod_ip,               # self ip
+                self._meta_port,            # self port
+            )
+            postgresql.reload_foreign_server_cache(
+                cn_leader_ip, self._meta_port, self._user_name
+            )
+            if ret:
+                break
+            cn_leader_ip = self.get_cn_leader()
+            time.sleep(1)
+        self.logger.info("--update the node table successfully--")
 
     def handle_candidate_change_event(self, candidates):
         leader_path = "{}/{}".format(self._leader_path, self._cluster_name)
@@ -579,22 +608,26 @@ class FalconCM:
             )
         )
         if self._replica_server_num > 0 and len(candidates) >= (
+<<<<<<< HEAD
             self._replica_server_num // 2 + 1
+=======
+            self._replica_server_num / 2
+>>>>>>> 78a0e1a (Implement cluster manage for standby read.)
         ):
             max_lsn = 0
-            new_host_port = ""
+            new_leader_host_port = ""
             for candidate in candidates:
                 node_path = "{}/{}".format(candidate_path, candidate)
                 data, _ = self._zk_client.get(node_path)
                 lsn = int(data.decode("utf-8"))
                 if lsn > max_lsn:
                     max_lsn = lsn
-                    new_host_port = candidate
-            new_host, _ = new_host_port.split(":", 1)
+                    new_leader_host_port = candidate
+            new_host, _ = new_leader_host_port.split(":", 1)
             if new_host == self._pod_ip:
                 try:
                     self._zk_client.create(
-                        leader_path, value=str.encode(new_host_port), ephemeral=True
+                        leader_path, value=str.encode(new_leader_host_port), ephemeral=True
                     )
                     self._zk_client.set(
                         "{}/{}/lastLeader".format(
@@ -605,7 +638,7 @@ class FalconCM:
                     try:
                         self._zk_client.delete(
                             "{}/{}/replicas/{}".format(
-                                self._cluster_path, self._cluster_name, new_host_port
+                                self._cluster_path, self._cluster_name, new_leader_host_port
                             )
                         )
                     except NoNodeError:
@@ -648,6 +681,18 @@ class FalconCM:
         self.monitor_cn_nodes()
         self.monitor_dn_nodes()
         while len(self._cn_list) != self._cn_num or len(self._dn_list) != self._dn_num:
+            time.sleep(1)
+
+    def wait_until_replicas_nodes_ready(self):
+        replica_path = "{}/{}/replicas".format(self._cluster_path, self._cluster_name)
+        while True:
+            try:
+                replicas_list = self._zk_client.get_children(replica_path)
+                if len(replica_path) == self._replica_server_num:
+                    break
+                self.logger.error(f"Replicas {replica_path} size: {len(replica_path)} < replica_server_num. Waiting...")
+            except Exception as ex:
+                self.logger.error(f"Failed to monitor path {replica_path}: {ex}")
             time.sleep(1)
 
     def build_cluster(self):
@@ -715,6 +760,7 @@ class FalconCM:
 
     def init_filesystem(self):
         leader_infos = {}
+        follower_infos = {}
         while len(leader_infos) < len(self._cluster_names):
             for cluster_name in self._cluster_names:
                 if cluster_name in leader_infos:
@@ -731,8 +777,11 @@ class FalconCM:
                     )
                     data = self._zk_client.get(cluster_leader_path)
                     leader_infos[cluster_name] = bytes.decode(data[0])
+                    follower_infos[cluster_name] = [bytes.decode(replica_node) for replica_node in replica_nodes]
             time.sleep(1)
-        init_filesystem(leader_infos, self._user_name, self._replica_server_num)
+        # leader_infos and follower_infos have the same size
+        assert (len(leader_infos) == len(follower_infos))
+        init_filesystem(leader_infos, follower_infos, self._user_name, self._replica_server_num)
         self.build_all_membership()
 
     def build_all_membership(self):
@@ -891,7 +940,7 @@ class FalconCM:
             if need_supplement_num > 0:
                 children = self._zk_client.get_children(self._need_supplement_path)
                 for child in children:
-                    self.logger.info("The node {} is need to supplement".format(child))
+                    self.logger.info("The node {} needs supplement".format(child))
                     cluster_path = self._cluster_path + "/" + child[0:-2]
                     if not self._zk_client.exists(
                         self._need_supplement_path + "/" + child
@@ -966,12 +1015,70 @@ class FalconCM:
             self._need_supplement_num += 1
             self._watch_need_supplement_lock.release()
 
-    def watch_replicas(self):
+    # first remove then add
+    def update_cn_node_table_replicas(removed, added):
+        cn_leader_ip = self.get_cn_leader()
+        ret = False
+        while not ret:
+            self.logger.info("--update replicas in node table--")
+            ret = postgresql.update_node_table_replicas(
+                cn_leader_ip,               # cn database ip
+                self._meta_port,            # cn database port
+                self._user_name,            # cn database user
+                added,
+                removed
+                self._cluster_id,           # group id
+            )
+            postgresql.reload_foreign_server_cache(
+                cn_leader_ip, self._meta_port, self._user_name
+            )
+            if ret:
+                break
+            cn_leader_ip = self.get_cn_leader()
+            time.sleep(1)
+        self.logger.info("--update the node table successfully--")
+
+    # Leader watch /replicas to update cn table
+    def watch_replicas_and_update_cn_table(self, flush_on_first_call):
         replica_path = "{}/{}/replicas".format(self._cluster_path, self._cluster_name)
+        self._cached_cluster_info = []
+        first_call_status = [int(flush_on_first_call)] # 0: skip first; 1: flush first; 2: first handled
 
         @self._zk_client.ChildrenWatch(replica_path)
         def watch_nodes(children):
-            self.logger.info("in watch replicas")
+            self.logger.info(f'{self._cluster_name} in watch replicas')
+
+            # For first non flush cn table call, only set the local replicas list
+            if first_call_status[0] == 0:
+                self._cached_cluster_info = children
+                skip_first[0] = 2
+                return
+            # For first flush cn table call, replace cn table with new replicas list
+            elif first_call_status[0] == 1:
+                self._cached_cluster_info = children
+                # replace means delete all old and write all new in one transaction
+                self.update_cn_node_table_replicas(["*"], children)
+                skip_first[0] = 2
+                return
+
+            # For later replicas update, apply the diff
+            old_children = set(self._cached_cluster_info)
+            new_children = set(children)
+
+            added = new_children - old_children
+            removed = old_children - new_children
+
+            if added:
+                self.logger.info(f"added: {added}")
+            if removed:
+                self.logger.info(f"removed: {removed}")
+
+            if added or removed:
+                self.update_cn_node_table_replicas(removed, added)
+
+            self._cached_cluster_info = children
+            print(f"{self._cluster_name}_info: {children}")
+
             self._watch_replica_lock.acquire()
             self._replica_change_num += 1
             self._watch_replica_lock.release()

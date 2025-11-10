@@ -19,8 +19,18 @@ def main():
     is_leader = falcon_cm.leader_select()
     if is_leader:
         logger_.info("This node is cn leader")
+        # become leader by preemption, should manually start some leader services
         if not falcon_cm.is_sys_ready():
+            # init, init_filesystem will update cn table later
+            # leader should watch_leader_and_candidates for later election (any need?)
             falcon_cm.watch_leader_and_candidates()
+
+            # wait until all replicas inited by write_replica()
+            self.wait_until_replicas_nodes_ready()
+            # leader should watch_replicas_and_update_cn_table, no need to flush, init_filesystem will flush leader and followers
+            self.watch_replicas_and_update_cn_table(False)
+
+            # wait for all nodes' falcon_cm.init_sys() done
             falcon_cm.monitor_nodes()
             falcon_cm.build_cluster()
             try:
@@ -28,11 +38,12 @@ def main():
             except Exception as e:
                 logger_.error("Failed to init filesystem: {}".format(e))
                 raise e
+        # in restart, watch_leader_and_candidates will flush leader, and flush followers in watch_replicas_and_update_cn_table(True)
         falcon_cm.watch_need_supplement()
-        falcon_cm.watch_replicas()
         falcon_cm.init_ready()
     else:
         logger_.info("This node is cn follower")
+        # here follower will watch_leader_and_candidates() for later election
         falcon_cm.write_replica()
 
     falcon_cm.watch_conn()
