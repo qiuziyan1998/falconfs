@@ -7,4 +7,8 @@ if [ ! -d "/home/falconMeta/data/metadata" ]; then
     chmod 777 /home/falconMeta/data/metadata
 fi
 
-su falconMeta -c "bash /home/falconMeta/start.sh"
+# su falconMeta -c "bash /home/falconMeta/start.sh"
+
+while true; do
+	sleep 10
+done
