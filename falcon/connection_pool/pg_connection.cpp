@@ -14,6 +14,11 @@ extern "C" {
 #include "connection_pool/connection_pool.h"
 #include "utils/error_code.h"
 #include "utils/utils_standalone.h"
+#include "postgres.h"
+#include "catalog/pg_type.h"
+#include "utils/array.h"
+#include "utils/builtins.h"
+#include "utils/lsyscache.h"
 }
 
 PGConnection::PGConnection(PGConnectionPool *parent, const char *ip, const int port, const char *userName)
@@ -279,10 +284,51 @@ void PGConnection::BackgroundWorker()
                     flatBufferBuilder.Clear();
                     std::vector<flatbuffers::Offset<flatbuffers::String>> plainCommandResponseData;
                     int row = PQntuples(res);
-                    int col = PQnfields(res);
-                    for (int i = 0; i < row; ++i)
-                        for (int j = 0; j < col; ++j)
+                    int col = PQnfields(res); // may add length of array
+                    for (int i = 0; i < row; ++i) {
+                        for (int j = 0; j < col; ++j) {
+                            const char *field_value = PQgetvalue(res, i, j);
+                            Oid field_type = PQftype(res, j);
+                            if (field_type == INT4ARRAYOID || field_type == TEXTARRAYOID) {
+                                ArrayType *array = DatumGetArrayTypeP(PointerGetDatum(field_value));
+                                int ndim = ARR_NDIM(array);
+                                int *dims = ARR_DIMS(array);
+                                int nitems = ArrayGetNItems(ndim, dims);
+                                
+                                Oid element_type = ARR_ELEMTYPE(array);
+                                int16 elmlen;
+                                bool elmbyval;
+                                char elmalign;
+                                Datum *elements;
+                                bool *nulls;
+                                
+                                get_typlenbyvalalign(element_type, &elmlen, &elmbyval, &elmalign);
+                                deconstruct_array(array, element_type, elmlen, elmbyval, elmalign,
+                                                &elements, &nulls, &nitems);
+                                for (int k = 0; k < nitems; k++) {
+                                    if (!nulls[k]) {
+                                        if (element_type == INT4OID) {
+                                            int32 value = DatumGetInt32(elements[k]);
+                                            plainCommandResponseData.push_back(flatBufferBuilder.CreateString(std::to_string(value)));
+                                        } else if (element_type == TEXTOID) {
+                                            text *txt = DatumGetTextP(elements[k]);
+                                            char *str = text_to_cstring(txt);
+                                            plainCommandResponseData.push_back(flatBufferBuilder.CreateString(str));
+                                            pfree(str);
+                                        }
+                                    } else {
+                                        plainCommandResponseData.push_back(flatBufferBuilder.CreateString("NULL"));
+                                    }
+                                }
+                                pfree(elements);
+                                pfree(nulls);
+                                col = nitems;
+                            } else {
+                                plainCommandResponseData.push_back(flatBufferBuilder.CreateString(field_value));
+                            }
                             plainCommandResponseData.push_back(flatBufferBuilder.CreateString(PQgetvalue(res, i, j)));
+                        }
+                    }
                     auto plainCommandResponse = falcon::meta_fbs::CreatePlainCommandResponse(
                         flatBufferBuilder,
                         row,

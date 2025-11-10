@@ -109,6 +109,14 @@ static void InitializeForeignServerTableScanCache(void)
     ForeignServerTableScanKey[FOREIGN_SERVER_TABLE_SERVER_ID_EQ].sk_subtype = INT4OID;
     ForeignServerTableScanKey[FOREIGN_SERVER_TABLE_SERVER_ID_EQ].sk_collation = DEFAULT_COLLATION_OID;
     ForeignServerTableScanKey[FOREIGN_SERVER_TABLE_SERVER_ID_EQ].sk_attno = Anum_falcon_foreign_server_server_id;
+
+    fmgr_info_cxt(F_INT4EQ,
+                  &ForeignServerTableScanKey[FOREIGN_SERVER_TABLE_GROUP_ID_EQ].sk_func,
+                  ScanCacheMemoryContext);
+    ForeignServerTableScanKey[FOREIGN_SERVER_TABLE_GROUP_ID_EQ].sk_strategy = BTEqualStrategyNumber;
+    ForeignServerTableScanKey[FOREIGN_SERVER_TABLE_GROUP_ID_EQ].sk_subtype = INT4OID;
+    ForeignServerTableScanKey[FOREIGN_SERVER_TABLE_GROUP_ID_EQ].sk_collation = DEFAULT_COLLATION_OID;
+    ForeignServerTableScanKey[FOREIGN_SERVER_TABLE_GROUP_ID_EQ].sk_attno = Anum_falcon_foreign_server_group_id;
 }
 
 ScanKeyData DirectoryTableScanKey[LAST_FALCON_DIRECTORY_TABLE_SCANKEY_TYPE];
@@ -405,4 +413,30 @@ bool CheckWhetherTargetExistInIndex(Relation heap, Relation index, ScanKeyData *
     }
     index_endscan(indexScan);
     return targetExist;
+}
+
+ArrayType *build_text_array(const char **strings, int count)
+{
+    Datum *datums = palloc(sizeof(Datum) * count);
+
+    for (int i = 0; i < count; i++) {
+        datums[i] = CStringGetTextDatum(strings[i]);
+    }
+
+    ArrayType *result = construct_array(datums, count, TEXTOID, -1, false, 'i');
+    pfree(datums);
+    return result;
+}
+
+ArrayType *build_int_array(const int32_t *values, int count)
+{
+    Datum *datums = palloc(sizeof(Datum) * count);
+
+    for (int i = 0; i < count; i++) {
+        datums[i] = UInt32GetDatum(values[i]);
+    }
+
+    ArrayType *result = construct_array(datums, count, INT4OID, 4, true, 'i');
+    pfree(datums);
+    return result;
 }

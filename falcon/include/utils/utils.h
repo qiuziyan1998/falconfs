@@ -42,6 +42,7 @@ bool CheckIfRelationExists(const char *relationName, Oid relNamespace);
 typedef enum CachedRelationType {
     CACHED_RELATION_FOREIGN_SERVER = 0,
     CACHED_RELATION_FOREIGN_SERVER_INDEX,
+    CACHED_RELATION_FOREIGN_SERVER_GROUP_ID_INDEX,
     CACHED_RELATION_SHARD_TABLE,
     CACHED_RELATION_SHARD_TABLE_INDEX,
     CACHED_RELATION_DIRECTORY_TABLE,
@@ -71,6 +72,10 @@ void freeStringInfo(StringInfo s);
 void hash_clear(HTAB *htab);
 
 Oid FalconExtensionOwner(void);
+
+ArrayType *build_text_array(const char **strings, int count);
+
+ArrayType *build_int_array(const int32_t *values, int count);
 
 typedef enum FALCON_LOCK_OPERATION { FALCON_LOCK_2PC_CLEANUP } FALCON_LOCK_OPERATION;
 
