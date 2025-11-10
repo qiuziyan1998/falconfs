@@ -12,8 +12,10 @@ else
     echo "listen_addresses='*'" >> /home/falconMeta/data/metadata/postgresql.conf
     echo "wal_level=logical" >> /home/falconMeta/data/metadata/postgresql.conf
     echo "max_wal_senders=10" >> /home/falconMeta/data/metadata/postgresql.conf
+    echo "wal_sender_timeout=300s" >> /home/falconMeta/data/metadata/postgresql.conf
+    echo "wal_receiver_timeout=300s" >> /home/falconMeta/data/metadata/postgresql.conf
     echo "hot_standby=on" >> /home/falconMeta/data/metadata/postgresql.conf
-    echo "synchronous_commit=on" >> /home/falconMeta/data/metadata/postgresql.conf
+    echo "synchronous_commit=remote_apply" >> /home/falconMeta/data/metadata/postgresql.conf
     echo "synchronous_standby_names='*'" >> /home/falconMeta/data/metadata/postgresql.conf
     echo "full_page_writes=on" >> /home/falconMeta/data/metadata/postgresql.conf
     echo "wal_log_hints=on" >> /home/falconMeta/data/metadata/postgresql.conf

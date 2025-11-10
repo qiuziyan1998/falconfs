@@ -146,6 +146,25 @@ def update_node_table(cnhost, cnport, user, nodeid, ip, port):
     res = execute(cn_connection_string, sql)
     return res
 
+def update_node_table_replicas(cnhost, cnport, user, added, removed, group_id):
+    port = str(port)
+    cnport = str(cnport)
+    cn_connection_string = "host={} port={} user={} dbname=postgres".format(
+        cnhost, cnport, user
+    )
+    if added:
+        added = f"ARRAY[{', '.join(added)}]"
+    else:
+        added = "ARRAY[]::text[]"
+    if removed:
+        removed = f"ARRAY[{', '.join(removed)}]"
+    else:
+        removed = "ARRAY[]::text[]"
+    sql = "SELECT * FROM falcon_update_foreign_server_multiple('{}', '{}', {});".format(
+        added, removed, group_id
+    )
+    res = execute(cn_connection_string, sql)
+    return res
 
 def update_start_background_service(host, port, user):
     port = str(port)
