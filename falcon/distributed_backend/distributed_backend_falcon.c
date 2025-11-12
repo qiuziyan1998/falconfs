@@ -37,7 +37,7 @@ void FalconCreateDistributedDataTable()
     StringInfo name = makeStringInfo();
     for (int i = 0; i < list_length(shardTableData); ++i) {
         Form_falcon_shard_table data = list_nth(shardTableData, i);
-        if (data->server_id != GetLocalServerId())
+        if (data->server_ids.servers[0] != GetLocalServerId())
             continue;
 
         resetStringInfo(name);

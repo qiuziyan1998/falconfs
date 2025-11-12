@@ -619,9 +619,15 @@ void FalconStatHandle(MetaProcessInfo *infoArray, int count)
 
         uint16_t partId = HashPartId(info->name);
         info->parentId_partId = CombineParentIdWithPartId(info->parentId, partId);
-        int shardId, workerId;
-        SearchShardInfoByShardValue(info->parentId_partId, &shardId, &workerId);
-        if (workerId != GetLocalServerId())
+        int shardId, count, workerId[FOREIGN_SERVER_GROUP_NUM_MAX];
+        SearchShardInfoByShardValue_Group(info->parentId_partId, &shardId, workerId, &count);
+        bool match = false;
+        while (count--) {
+            if (workerId[count] == GetLocalServerId()) {
+                match = true;
+            }
+        }
+        if (!match)
             CHECK_ERROR_CODE_WITH_CONTINUE(WRONG_WORKER);
 
         bool found;
@@ -730,9 +736,15 @@ void FalconOpenHandle(MetaProcessInfo *infoArray, int count)
 
         uint16_t partId = HashPartId(info->name);
         info->parentId_partId = CombineParentIdWithPartId(info->parentId, partId);
-        int shardId, workerId;
-        SearchShardInfoByShardValue(info->parentId_partId, &shardId, &workerId);
-        if (workerId != GetLocalServerId())
+        int shardId, count, workerId[FOREIGN_SERVER_GROUP_NUM_MAX];
+        SearchShardInfoByShardValue_Group(info->parentId_partId, &shardId, workerId, &count);
+        bool match = false;
+        while (count--) {
+            if (workerId[count] == GetLocalServerId()) {
+                match = true;
+            }
+        }
+        if (!match)
             CHECK_ERROR_CODE_WITH_CONTINUE(WRONG_WORKER);
 
         bool found;
@@ -1033,7 +1045,7 @@ void FalconReadDirHandle(MetaProcessInfo info)
     int32_t readCount = 0;
     int shardIndex = firstCall ? 0 : lastShardIndex;
     while (shardIndex < shardTableCount) {
-        int workerId = ((FormData_falcon_shard_table *)list_nth(shardTableData, shardIndex))->server_id;
+        int workerId = ((FormData_falcon_shard_table *)list_nth(shardTableData, shardIndex))->server_ids.servers[0];
         int shardId = ((FormData_falcon_shard_table *)list_nth(shardTableData, shardIndex))->range_point;
         if (workerId != GetLocalServerId()) {
             ++shardIndex;
@@ -1288,7 +1300,7 @@ void FalconRmdirSubRmdirHandle(MetaProcessInfo info)
     SetUpScanCaches();
     List *shardTableData = GetShardTableData();
     for (int i = 0; i < list_length(shardTableData); ++i) {
-        int32_t workerId = ((FormData_falcon_shard_table *)list_nth(shardTableData, i))->server_id;
+        int32_t workerId = ((FormData_falcon_shard_table *)list_nth(shardTableData, i))->server_ids.servers[0];
         int32_t shardId = ((FormData_falcon_shard_table *)list_nth(shardTableData, i))->range_point;
         if (workerId != GetLocalServerId())
             continue;

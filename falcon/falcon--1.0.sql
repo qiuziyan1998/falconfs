@@ -42,20 +42,25 @@ CREATE TABLE falcon.falcon_foreign_server(
     host        text NOT NULL,
     port        int NOT NULL,
     is_local    bool NOT NULL,
-    user_name   text NOT NULL
+    user_name   text NOT NULL,
+    group_id    int NOT NULL,
+    is_leader   bool NOT NULL,
+    is_valid    bool NOT NULL
 );
 CREATE UNIQUE INDEX falcon_foreign_server_index
     ON falcon.falcon_foreign_server using btree(server_id);
+CREATE INDEX falcon_foreign_server_group_id_index
+    ON falcon.falcon_foreign_server USING btree(group_id);
 ALTER TABLE falcon.falcon_foreign_server SET SCHEMA pg_catalog;
 GRANT SELECT ON pg_catalog.falcon_foreign_server TO public;
 
 CREATE FUNCTION pg_catalog.falcon_insert_foreign_server(server_id int, server_name cstring, host cstring,
-                                                 port int, is_local bool, user_name cstring)
+                                                 port int, is_local bool, user_name cstring, group_id int, is_leader bool)
     RETURNS INTEGER
     LANGUAGE C STRICT
     AS 'MODULE_PATHNAME', $$falcon_insert_foreign_server$$;
 COMMENT ON FUNCTION pg_catalog.falcon_insert_foreign_server(server_id int, server_name cstring, host cstring,
-                                                     port int, is_local bool, user_name cstring)
+                                                     port int, is_local bool, user_name cstring, group_id int, is_leader bool)
     IS 'falcon insert foreign server';
 
 CREATE FUNCTION pg_catalog.falcon_delete_foreign_server(server_id int)
@@ -70,6 +75,13 @@ CREATE FUNCTION pg_catalog.falcon_update_foreign_server(server_id int, host cstr
     LANGUAGE C STRICT
     AS 'MODULE_PATHNAME', $$falcon_update_foreign_server$$;
 COMMENT ON FUNCTION pg_catalog.falcon_update_foreign_server(server_id int, host cstring, port int)
+    IS 'falcon update foreign server';
+
+CREATE FUNCTION pg_catalog.falcon_update_foreign_server_multiple(added text[], removed text[], group_id int)
+    RETURNS INTEGER
+    LANGUAGE C STRICT
+    AS 'MODULE_PATHNAME', $$falcon_update_foreign_server_multiple$$;
+COMMENT ON FUNCTION pg_catalog.falcon_update_foreign_server_multiple(added text[], removed text[], group_id int)
     IS 'falcon update foreign server';
 
 CREATE FUNCTION pg_catalog.falcon_reload_foreign_server_cache()
@@ -91,7 +103,7 @@ COMMENT ON FUNCTION pg_catalog.falcon_foreign_server_test(mode cstring)
 ----------------------------------------------------------------
 CREATE TABLE falcon.falcon_shard_table(
     range_point int NOT NULL,
-    server_id   int NOT NULL
+    servers     int[] NOT NULL
 );
 CREATE UNIQUE INDEX falcon_shard_table_index ON falcon.falcon_shard_table using btree(range_point);
 ALTER TABLE falcon.falcon_shard_table SET SCHEMA pg_catalog;
@@ -104,15 +116,15 @@ CREATE FUNCTION pg_catalog.falcon_build_shard_table(shard_count int)
 COMMENT ON FUNCTION pg_catalog.falcon_build_shard_table(shard_count int)
     IS 'falcon build shard table';
 
-CREATE FUNCTION pg_catalog.falcon_update_shard_table(range_point bigint[], server_id int[], lockInternal bool default true)
+CREATE FUNCTION pg_catalog.falcon_update_shard_table(range_point int, server_id int[], lockInternal bool default true)
     RETURNS INTEGER
     LANGUAGE C STRICT
     AS 'MODULE_PATHNAME', $$falcon_update_shard_table$$;
-COMMENT ON FUNCTION pg_catalog.falcon_update_shard_table(range_point bigint[], server_id int[], lockInternal bool)
+COMMENT ON FUNCTION pg_catalog.falcon_update_shard_table(range_point int, server_id int[], lockInternal bool)
     IS 'falcon update shard table';
 
 CREATE FUNCTION pg_catalog.falcon_renew_shard_table()
-    RETURNS TABLE(range_min int, range_max int, host text, port int, server_id int)
+    RETURNS TABLE(range_min int, range_max int, host text[], port int[], server_id int[])
     LANGUAGE C STRICT
     AS 'MODULE_PATHNAME', $$falcon_renew_shard_table$$;
 COMMENT ON FUNCTION pg_catalog.falcon_renew_shard_table()

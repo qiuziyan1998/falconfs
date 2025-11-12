@@ -32,7 +32,7 @@ Datum falcon_clear_user_data_func(PG_FUNCTION_ARGS)
     List *shardTableData = GetShardTableData();
     for (int i = 0; i < list_length(shardTableData); ++i) {
         FormData_falcon_shard_table *data = list_nth(shardTableData, i);
-        if (data->server_id != GetLocalServerId())
+        if (data->server_ids.servers[0] != GetLocalServerId())
             continue;
 
         appendStringInfo(command, "TRUNCATE TABLE falcon_inode_table_" INT32_PRINT_SYMBOL ";", data->range_point);

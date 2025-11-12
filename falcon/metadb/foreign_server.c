@@ -22,6 +22,7 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/wait_event.h"
+#include "utils/lsyscache.h"
 
 #include "control/control_flag.h"
 #include "utils/error_log.h"
@@ -46,14 +47,20 @@ static inline void InsertForeignServerByRel(Relation rel,
                                             const char *host,
                                             const int32_t port,
                                             const bool isLocal,
-                                            const char *userName);
+                                            const char *userName,
+                                            const int32_t group_id,
+                                            const bool is_leader,
+                                            const bool is_valid);
 static inline void DeleteForeignServerByRel(Relation rel, const int32_t serverId);
 static inline void UpdateForeignServerByRel(Relation rel, const int32_t serverId, const char *host, const int32_t port);
+static inline void UpdateForeignServerMultipleByRel(Relation rel, const char **added, int added_count,
+                                                    const char **removed, int removed_count, const int32_t group_id);
 
 PG_FUNCTION_INFO_V1(falcon_foreign_server_test);
 PG_FUNCTION_INFO_V1(falcon_insert_foreign_server);
 PG_FUNCTION_INFO_V1(falcon_delete_foreign_server);
 PG_FUNCTION_INFO_V1(falcon_update_foreign_server);
+PG_FUNCTION_INFO_V1(falcon_update_foreign_server_multiple);
 PG_FUNCTION_INFO_V1(falcon_reload_foreign_server_cache);
 
 Datum falcon_foreign_server_test(PG_FUNCTION_ARGS)
@@ -68,7 +75,7 @@ Datum falcon_foreign_server_test(PG_FUNCTION_ARGS)
             appendStringInfo(serverName, "worker_%d", serverId);
 
             // fake foreign server
-            InsertForeignServer(serverId, serverName->data, "192.168.0.1", serverId, false, "liumingyu");
+            InsertForeignServer(serverId, serverName->data, "192.168.0.1", serverId, false, "liumingyu", 0, true, true);
         }
         InvalidateForeignServerShmemCache();
         ReloadForeignServerShmemCache();
@@ -76,23 +83,40 @@ Datum falcon_foreign_server_test(PG_FUNCTION_ARGS)
         List *workerIdList = GetAllForeignServerId(false, false);
         (void)GetForeignServerConnection(workerIdList);
     } else if (strcmp(mode, "GET_INFO_CONN_AND_CLEANUP") == 0) {
-        List *workerIdList = GetAllForeignServerId(false, false);
+        List *workerIdList = GetAllForeignServerId_Group(false, false);
         List *connInfoList = GetForeignServerConnectionInfo(workerIdList);
         List *foreignServerInfoList = GetForeignServerInfo(workerIdList);
         for (int i = 0; i < list_length(workerIdList); ++i) {
-            int32_t workerId = list_nth_int(workerIdList, i);
-            ForeignServerConnectionInfo *connInfo = list_nth(connInfoList, i);
-            FormData_falcon_foreign_server *foreignServerInfo = list_nth(foreignServerInfoList, i);
-            elog(WARNING, "workerId: %d, connInfo: %s, %d", workerId, connInfo->host, connInfo->port);
-            elog(WARNING,
-                 "workerId: %d, foreignServerInfo: %s, %d, %d, %s, %d, %s",
-                 workerId,
-                 foreignServerInfo->host,
-                 foreignServerInfo->port,
-                 foreignServerInfo->server_id,
-                 foreignServerInfo->server_name,
-                 foreignServerInfo->is_local,
-                 foreignServerInfo->user_name);
+            // int32_t workerId = list_nth_int(workerIdList, i);
+            ArrayType *serverId_list = list_nth(workerIdList, i);
+            Oid element_type = INT4OID;
+            int16 elmlen;
+            bool elmbyval;
+            char elmalign;
+            get_typlenbyvalalign(INT4OID, &elmlen, &elmbyval, &elmalign);
+            Datum *elements;
+            bool *nulls;
+            int nelems;
+            deconstruct_array(serverId_list, element_type, elmlen, elmbyval, elmalign, &elements, &nulls, &nelems);
+            for (int j = 0; j < nelems; j++) {
+                if (!nulls[j]) continue;
+                int32_t workerId = DatumGetInt32(elements[j]);
+
+                ForeignServerConnectionInfo *connInfo = list_nth(list_nth(connInfoList, i), j);
+                FormData_falcon_foreign_server *foreignServerInfo = list_nth(foreignServerInfoList, i * nelems + j);
+                elog(WARNING, "workerId: %d, connInfo: %s, %d", workerId, connInfo->host, connInfo->port);
+                elog(WARNING,
+                    "workerId: %d, foreignServerInfo: %s, %d, %d, %s, %d, %s",
+                    workerId,
+                    foreignServerInfo->host,
+                    foreignServerInfo->port,
+                    foreignServerInfo->server_id,
+                    foreignServerInfo->server_name,
+                    foreignServerInfo->is_local,
+                    foreignServerInfo->user_name);
+            }
+            pfree(elements);
+            pfree(nulls);
         }
         (void)GetForeignServerConnection(list_make1_int(1));
         CleanupForeignServerConnections();
@@ -108,9 +132,12 @@ Datum falcon_insert_foreign_server(PG_FUNCTION_ARGS)
     int32_t port = PG_GETARG_INT32(3);
     bool isLocal = PG_GETARG_BOOL(4);
     char *userName = PG_GETARG_CSTRING(5);
+    int32_t group_id = PG_GETARG_INT32(6);
+    bool is_leader = PG_GETARG_BOOL(7);
+    bool is_valid = true;
 
     Relation rel = table_open(ForeignServerRelationId(), RowExclusiveLock);
-    InsertForeignServerByRel(rel, serverId, serverName, host, port, isLocal, userName);
+    InsertForeignServerByRel(rel, serverId, serverName, host, port, isLocal, userName, group_id, is_leader, is_valid);
 
     table_close(rel, RowExclusiveLock);
     InvalidateForeignServerShmemCache();
@@ -143,6 +170,50 @@ Datum falcon_update_foreign_server(PG_FUNCTION_ARGS)
     PG_RETURN_INT16(0);
 }
 
+Datum falcon_update_foreign_server_multiple(PG_FUNCTION_ARGS)
+{
+    ArrayType *array;
+    Datum *elements0, *elements1;
+    bool *nulls0, *nulls1;
+    int nelems;
+    array = PG_GETARG_ARRAYTYPE_P(0);
+    deconstruct_array(array, TEXTOID, -1, false, TYPALIGN_INT, &elements0, &nulls0, &nelems);
+    const char *added[FOREIGN_SERVER_GROUP_NUM_MAX];
+    int notNullNum_added = 0;
+    for (int i = 0; i < nelems; i++)
+    {
+        if (!nulls0[i])
+        {
+            text *txt = DatumGetTextPP(elements0[i]);
+            added[notNullNum_added++] = text_to_cstring(txt);
+        }
+    }
+    array = PG_GETARG_ARRAYTYPE_P(1);
+    deconstruct_array(array, TEXTOID, -1, false, TYPALIGN_INT, &elements1, &nulls1, &nelems);
+    const char *removed[FOREIGN_SERVER_GROUP_NUM_MAX];
+    int notNullNum_removed = 0;
+    for (int i = 0; i < nelems; i++)
+    {
+        if (!nulls1[i])
+        {
+            text *txt = DatumGetTextPP(elements1[i]);
+            removed[notNullNum_removed++] = text_to_cstring(txt);
+        }
+    }
+
+    int32_t group_id = PG_GETARG_INT32(2);
+    Relation rel = table_open(ForeignServerRelationId(), RowExclusiveLock);
+    // first remove then add
+    UpdateForeignServerMultipleByRel(rel, added, notNullNum_added, removed, notNullNum_removed, group_id);
+    pfree(elements0);
+    pfree(nulls0);
+    pfree(elements1);
+    pfree(nulls1);
+    table_close(rel, RowExclusiveLock);
+    InvalidateForeignServerShmemCache();
+    PG_RETURN_INT16(0);
+}
+
 Datum falcon_reload_foreign_server_cache(PG_FUNCTION_ARGS)
 {
     InvalidateForeignServerShmemCache();
@@ -161,6 +232,12 @@ Oid ForeignServerRelationIndexId(void)
 {
     GetRelationOid("falcon_foreign_server_index", &CachedRelationOid[CACHED_RELATION_FOREIGN_SERVER_INDEX]);
     return CachedRelationOid[CACHED_RELATION_FOREIGN_SERVER_INDEX];
+}
+
+Oid ForeignServerRelationGroupIdIndexId(void)
+{
+    GetRelationOid("falcon_foreign_server_group_id_index", &CachedRelationOid[CACHED_RELATION_FOREIGN_SERVER_GROUP_ID_INDEX]);
+    return CachedRelationOid[CACHED_RELATION_FOREIGN_SERVER_GROUP_ID_INDEX];
 }
 
 void ForeignServerCacheInit()
@@ -187,7 +264,10 @@ static inline void InsertForeignServerByRel(Relation rel,
                                             const char *host,
                                             const int32_t port,
                                             const bool isLocal,
-                                            const char *userName)
+                                            const char *userName,
+                                            const int32_t group_id,
+                                            const bool is_leader,
+                                            const bool is_valid)
 {
     Datum values[Natts_falcon_foreign_server];
     bool isNulls[Natts_falcon_foreign_server];
@@ -201,6 +281,9 @@ static inline void InsertForeignServerByRel(Relation rel,
     values[Anum_falcon_foreign_server_port - 1] = Int32GetDatum(port);
     values[Anum_falcon_foreign_server_is_local - 1] = BoolGetDatum(isLocal);
     values[Anum_falcon_foreign_server_user_name - 1] = CStringGetTextDatum(userName);
+    values[Anum_falcon_foreign_server_group_id - 1] = Int32GetDatum(group_id);
+    values[Anum_falcon_foreign_server_is_leader - 1] = BoolGetDatum(is_leader);
+    values[Anum_falcon_foreign_server_is_valid - 1] = BoolGetDatum(is_valid);
 
     heapTuple = heap_form_tuple(tupleDescriptor, values, isNulls);
     CatalogTupleInsert(rel, heapTuple);
@@ -247,6 +330,8 @@ static inline void UpdateForeignServerByRel(Relation rel, const int32_t serverId
         doUpdateArray[Anum_falcon_foreign_server_host - 1] = true;
         datumArray[Anum_falcon_foreign_server_port - 1] = Int32GetDatum(port);
         doUpdateArray[Anum_falcon_foreign_server_port - 1] = true;
+        datumArray[Anum_falcon_foreign_server_is_valid - 1] = BoolGetDatum(true);
+        doUpdateArray[Anum_falcon_foreign_server_is_valid - 1] = true;
         HeapTuple updatedTuple =
             heap_modify_tuple(heapTuple, RelationGetDescr(rel), datumArray, isNullArray, doUpdateArray);
         CatalogTupleUpdate(rel, &updatedTuple->t_self, updatedTuple);
@@ -257,15 +342,149 @@ static inline void UpdateForeignServerByRel(Relation rel, const int32_t serverId
     systable_endscan(scanDescriptor);
 }
 
+// first remove then add
+static inline void UpdateForeignServerMultipleByRel(Relation rel, const char **added, int added_count,
+                                                    const char **removed, int removed_count, const int32_t group_id)
+{
+    SetUpScanCaches();
+    ScanKeyData scanKey[1];
+    scanKey[0] = ForeignServerTableScanKey[FOREIGN_SERVER_TABLE_GROUP_ID_EQ];
+    scanKey[0].sk_argument = Int32GetDatum(group_id);
+
+    // scan on group_id index
+    SysScanDesc scanDescriptor = systable_beginscan(rel, ForeignServerRelationGroupIdIndexId(), true, NULL, 1, scanKey);
+
+    // if ["*"], remove all
+    bool removeAll = (removed_count == 1 && strcmp(removed[0], "*") == 0);
+    // index of new server to add in added
+    int added_index = 0;
+    HeapTuple heapTuple;
+    
+    // scan all row, match removed and !is_valid
+    while (HeapTupleIsValid(heapTuple = systable_getnext(scanDescriptor))) {
+        bool isNull;
+        Datum hostDatum = heap_getattr(heapTuple, Anum_falcon_foreign_server_host, RelationGetDescr(rel), &isNull);
+        char *currentHost = isNull ? "" : TextDatumGetCString(hostDatum);
+        Datum portDatum = heap_getattr(heapTuple, Anum_falcon_foreign_server_port, RelationGetDescr(rel), &isNull);
+        int32_t currentPort = isNull ? 0 : DatumGetInt32(portDatum);
+        Datum isValidDatum = heap_getattr(heapTuple, Anum_falcon_foreign_server_is_valid, RelationGetDescr(rel), &isNull);
+        bool currentIsValid = !isNull && DatumGetBool(isValidDatum);
+
+        // check need to remove this row or not
+        bool needRemove = false;
+        if (removeAll) {
+            needRemove = true;
+        } else {
+            // check host:port in removed
+            char currentPair[256];
+            snprintf(currentPair, sizeof(currentPair), "%s:%d", currentHost, currentPort);
+            for (int i = 0; i < removed_count; i++) {
+                if (strcmp(currentPair, removed[i]) == 0) {
+                    needRemove = true;
+                    if (!currentIsValid) {
+                        elog(WARNING, "UpdateForeignServerMultipleByRel: removing already invalid replica server %s:%d", currentHost, currentPort);
+                    }
+                    break;
+                }
+            }
+        }
+
+        // how to update this row: remove + add, remove only, add only, do nothing
+        bool removeThenAdd = false, removeOnly = false, addOnly = false;
+        if (needRemove) {
+            if (added_index < added_count) {
+                // server left to add
+                // valid row, remove then add
+                removeThenAdd = currentIsValid;
+                // invalid row, add only
+                addOnly = !currentIsValid;
+            } else {
+                // no server to add, remove if valid
+                removeOnly = currentIsValid;
+            }
+        } else if (added_index < added_count) {
+            // no need to remove, server left to add, add on invalid row
+            addOnly = !currentIsValid;
+        } else {
+            // no need to remove, no server to add, do nothing 
+        }
+
+        // update info
+        Datum datumArray[Natts_falcon_foreign_server];
+        bool isNullArray[Natts_falcon_foreign_server];
+        memset(isNullArray, 0, sizeof(isNullArray));
+        bool doUpdateArray[Natts_falcon_foreign_server];
+        memset(doUpdateArray, 0, sizeof(doUpdateArray));
+
+        // any add, update row directly
+        if (removeThenAdd || addOnly) {
+            // update this row to first elemet left in added
+            const char *added_value = added[added_index];
+            char *colon = strchr(added_value, ':');
+            
+            if (colon) {
+                *colon = '\0'; // set ':' to be end of string
+                const char *host = added_value;
+                int32_t port = atoi(colon + 1);
+                *colon = ':';
+                // update: host, port, is_valid
+                datumArray[Anum_falcon_foreign_server_host - 1] = CStringGetTextDatum(host);
+                doUpdateArray[Anum_falcon_foreign_server_host - 1] = true;
+                datumArray[Anum_falcon_foreign_server_port - 1] = Int32GetDatum(port);
+                doUpdateArray[Anum_falcon_foreign_server_port - 1] = true;
+                datumArray[Anum_falcon_foreign_server_is_valid - 1] = BoolGetDatum(true);
+                doUpdateArray[Anum_falcon_foreign_server_is_valid - 1] = true;
+                if (removeThenAdd) {
+                    elog(INFO, "Reused removed row for group_id %d with host: %s", group_id, added_value);
+                } else {
+                    elog(INFO, "Added row for group_id %d with host: %s", group_id, added_value);
+                }
+            } else if (removeThenAdd) {
+                // element in added doesn't contain ':', add failed
+                // remove only
+                removeOnly = true;
+                elog(WARNING, "Invalid added host format: %s, will remove later", added_value);
+            }
+            // pass one element in added
+            added_index++;
+        }
+        // remove only, set is_valid to false
+        if (removeOnly) {
+            datumArray[Anum_falcon_foreign_server_is_valid - 1] = BoolGetDatum(false);
+            doUpdateArray[Anum_falcon_foreign_server_is_valid - 1] = true;
+            elog(INFO, "Removed row for group_id %d", group_id);
+        }
+        
+        // any update
+        if (removeThenAdd || removeOnly || addOnly) {
+            HeapTuple updatedTuple =
+                heap_modify_tuple(heapTuple, RelationGetDescr(rel), datumArray, isNullArray, doUpdateArray);
+            
+            CatalogTupleUpdate(rel, &updatedTuple->t_self, updatedTuple);
+            heap_freetuple(updatedTuple);
+            
+            CommandCounterIncrement();
+        }
+    }
+    systable_endscan(scanDescriptor);
+
+    if (added_index < added_count) {
+        elog(WARNING, "Not all added elements used for group_id %d: %d remaining", group_id, added_count - added_index);
+    }
+}
+
 void InsertForeignServer(const int32_t serverId,
                          const char *serverName,
                          const char *host,
                          const int32_t port,
                          const bool isLocal,
-                         const char *userName)
+                         const char *userName,
+                         const int32_t group_id,
+                         const bool is_leader,
+                         const bool is_valid)
 {
     Relation rel = table_open(ForeignServerRelationId(), RowExclusiveLock);
-    InsertForeignServerByRel(rel, serverId, serverName, host, port, isLocal, userName);
+    InsertForeignServerByRel(rel, serverId, serverName, host, port, isLocal, userName, group_id, is_leader, is_valid);
     table_close(rel, RowExclusiveLock);
     InvalidateForeignServerShmemCache();
 }
@@ -306,7 +525,7 @@ static void RenewForeignServerLocalCache(const bool needLock)
     if (needLock)
         LWLockAcquire(&ForeignServerShmemControl->lock, LW_SHARED);
 
-    // 1.
+    // 1. remove foreign server connection through ForeignServerShmemCache info which is updated by cm
     HASH_SEQ_STATUS status;
     ForeignServerConnection *foreignServerConnection;
     FormData_falcon_foreign_server *foreignServerInfo;
@@ -365,15 +584,31 @@ List *GetForeignServerInfo(List *foreignServerIdList)
 
     List *result = NIL;
     for (int i = 0; i < list_length(foreignServerIdList); ++i) {
-        int32_t serverId = list_nth_int(foreignServerIdList, i);
+        // int32_t serverId = list_nth_int(foreignServerIdList, i);
+        ArrayType *serverId_list = list_nth(foreignServerIdList, i);
+        Oid element_type = INT4OID;
+        int16 elmlen;
+        bool elmbyval;
+        char elmalign;
+        get_typlenbyvalalign(INT4OID, &elmlen, &elmbyval, &elmalign);
+        Datum *elements;
+        bool *nulls;
+        int nelems;
+        deconstruct_array(serverId_list, element_type, elmlen, elmbyval, elmalign, &elements, &nulls, &nelems);
+        for (int j = 0; j < nelems; j++) {
+            if (!nulls[j]) continue;
+            int32_t serverId = DatumGetInt32(elements[j]);
 
-        bool found;
-        FormData_falcon_foreign_server *foreignServerInfo =
-            hash_search(ForeignServerShmemCache, &serverId, HASH_FIND, &found);
+            bool found;
+            FormData_falcon_foreign_server *foreignServerInfo =
+                hash_search(ForeignServerShmemCache, &serverId, HASH_FIND, &found);
 
-        FormData_falcon_foreign_server *dataCopy = palloc(sizeof(FormData_falcon_foreign_server));
-        memcpy(dataCopy, foreignServerInfo, sizeof(FormData_falcon_foreign_server));
-        result = lappend(result, dataCopy);
+            FormData_falcon_foreign_server *dataCopy = palloc(sizeof(FormData_falcon_foreign_server));
+            memcpy(dataCopy, foreignServerInfo, sizeof(FormData_falcon_foreign_server));
+            result = lappend(result, dataCopy);
+        }
+        pfree(elements);
+        pfree(nulls);
     }
 
     LWLockRelease(&ForeignServerShmemControl->lock);
@@ -413,6 +648,7 @@ static bool PGconnPrepare(PGconn *conn)
     return false;
 }
 
+/* accept only list of int, not list of list */
 List *GetForeignServerConnection(List *foreignServerIdList)
 {
     while (pg_atomic_read_u32(ForeignServerShmemCacheInvalid)) {
@@ -503,6 +739,7 @@ List *GetForeignServerConnection(List *foreignServerIdList)
     return result;
 }
 
+// accept list of arrays
 List *GetForeignServerConnectionInfo(List *foreignServerIdList)
 {
     while (pg_atomic_read_u32(ForeignServerShmemCacheInvalid)) {
@@ -512,20 +749,42 @@ List *GetForeignServerConnectionInfo(List *foreignServerIdList)
 
     List *result = NIL;
     for (int i = 0; i < list_length(foreignServerIdList); ++i) {
-        int32_t serverId = list_nth_int(foreignServerIdList, i);
+        // int32_t serverId = list_nth_int(foreignServerIdList, i);
+        ArrayType *serverId_list = list_nth(foreignServerIdList, i);
+        Oid element_type = INT4OID;
+        int16 elmlen;
+        bool elmbyval;
+        char elmalign;
+        get_typlenbyvalalign(INT4OID, &elmlen, &elmbyval, &elmalign);
+        Datum *elements;
+        bool *nulls;
+        int nelems;
+        deconstruct_array(serverId_list, element_type, elmlen, elmbyval, elmalign, &elements, &nulls, &nelems);
+        List *group_info = NIL;
+        for (int j = 0; j < nelems; j++) {
+            if (!nulls[j]) continue;
+            int32_t serverId = DatumGetInt32(elements[j]);
+            bool found;
+            FormData_falcon_foreign_server *foreignServerInfo =
+                hash_search(ForeignServerShmemCache, &serverId, HASH_FIND, &found);
+            if (!found && serverId != -1) {
+                FALCON_ELOG_ERROR_EXTENDED(PROGRAM_ERROR, "trying to ask for invalid server, server id: %d.", serverId);
+            }
 
-        bool found;
-        FormData_falcon_foreign_server *foreignServerInfo =
-            hash_search(ForeignServerShmemCache, &serverId, HASH_FIND, &found);
-        if (!found) {
-            FALCON_ELOG_ERROR_EXTENDED(PROGRAM_ERROR, "trying to ask for invalid server, server id: %d.", serverId);
+            ForeignServerConnectionInfo *info = palloc(sizeof(ForeignServerConnectionInfo));
+
+            if (serverId != -1) {
+                strcpy(info->host, foreignServerInfo->host);
+                info->port = foreignServerInfo->port;
+            } else {
+                strcpy(info->host, "");
+                info->port = -1;
+            }
+            group_info = lappend(group_info, info);
         }
-
-        ForeignServerConnectionInfo *info = palloc(sizeof(ForeignServerConnectionInfo));
-
-        strcpy(info->host, foreignServerInfo->host);
-        info->port = foreignServerInfo->port;
-        result = lappend(result, info);
+        result = lappend(result, group_info);
+        pfree(elements);
+        pfree(nulls);
     }
 
     LWLockRelease(&ForeignServerShmemControl->lock);
@@ -554,6 +813,30 @@ const char *GetLocalServerName(void)
     return LocalServerName;
 }
 
+static inline ArrayType *ConvertListToArray(List *intList, Oid elementType)
+{
+    if (intList == NIL) {
+        return construct_empty_array(elementType);
+    }
+
+    int count = list_length(intList);
+    Datum *elements = (Datum *)palloc(sizeof(Datum) * count);
+    ListCell *cell;
+    int i = 0;
+
+    foreach(cell, intList) {
+        elements[i] = Int32GetDatum(lfirst_int(cell));
+        i++;
+    }
+
+    ArrayType *array = construct_array(elements, count, elementType, 
+                                      sizeof(int32), true, 'i');
+    pfree(elements);
+
+    return array;
+}
+
+/* get only id of leader */
 List *GetAllForeignServerId(bool exceptSelf, bool exceptCn)
 {
     while (pg_atomic_read_u32(ForeignServerShmemCacheInvalid)) {
@@ -570,8 +853,75 @@ List *GetAllForeignServerId(bool exceptSelf, bool exceptCn)
             continue;
         if (exceptCn && foreignServerInfo->server_id == 0) // we assume 0 to be cn
             continue;
+        if (!foreignServerInfo->is_leader)
+            continue;
         result = lappend_int(result, foreignServerInfo->server_id);
     }
+
+    LWLockRelease(&ForeignServerShmemControl->lock);
+    return result;
+}
+
+List *GetAllForeignServerId_Group(bool exceptSelf, bool exceptCn)
+{
+    while (pg_atomic_read_u32(ForeignServerShmemCacheInvalid)) {
+        ReloadForeignServerShmemCache();
+    }
+    LWLockAcquire(&ForeignServerShmemControl->lock, LW_SHARED);
+
+    // 用于按group_id分组的临时哈希表
+    HTAB *groupHash = NULL;
+    HASHCTL hashCtl;
+    memset(&hashCtl, 0, sizeof(hashCtl));
+    hashCtl.keysize = sizeof(int); // group_id作为键
+    hashCtl.entrysize = sizeof(GroupServerEntry);
+    hashCtl.hcxt = CurrentMemoryContext;
+    groupHash = hash_create("ForeignServer Group Hash", 
+                          32, &hashCtl, HASH_ELEM | HASH_CONTEXT);
+
+    List *result = NIL;
+    HASH_SEQ_STATUS status;
+    FormData_falcon_foreign_server *foreignServerInfo;
+    hash_seq_init(&status, ForeignServerShmemCache);
+    while ((foreignServerInfo = hash_seq_search(&status)) != NULL) {
+        if (exceptSelf && foreignServerInfo->is_local)
+            continue;
+        if (exceptCn && foreignServerInfo->group_id == 0) // we assume 0 to be cn
+            continue;
+        // if (!foreignServerInfo->is_valid) {
+        //     continue;
+        // }
+        // save (group_id, server_id[]) in the return result
+        bool found = false;
+        GroupServerEntry *entry = (GroupServerEntry *)hash_search(groupHash, 
+                                                                  &foreignServerInfo->group_id,
+                                                                  HASH_ENTER, &found);
+        if (!found) {
+            // init
+            entry->server_list = NIL;
+        }
+        if (foreignServerInfo->is_leader) {
+            // leader the first; leader is always valid
+            entry->server_list = list_insert_nth_int(entry->server_list, 0, foreignServerInfo->server_id);
+        } else if (foreignServerInfo->is_valid) {
+            entry->server_list = lappend_int(entry->server_list, foreignServerInfo->server_id);
+        } else {
+            // -1 for Null
+            entry->server_list = lappend_int(entry->server_list, -1);
+        }
+    }
+    
+    HASH_SEQ_STATUS hashStatus;
+    GroupServerEntry *groupEntry;
+    hash_seq_init(&hashStatus, groupHash);
+    while ((groupEntry = hash_seq_search(&hashStatus)) != NULL) {
+        // copy array from list
+        ArrayType *array = ConvertListToArray(groupEntry->server_list, INT4OID);
+        result = lappend(result, array);
+        // free the temp list
+        list_free(groupEntry->server_list);
+    }
+    hash_destroy(groupHash);
 
     LWLockRelease(&ForeignServerShmemControl->lock);
     return result;
@@ -656,6 +1006,9 @@ void ReloadForeignServerShmemCache()
         text_to_cstring_buffer((text *)datumArray[Anum_falcon_foreign_server_user_name - 1],
                                entry->user_name,
                                FOREIGN_SERVER_NAME_MAX_LENGTH);
+        entry->group_id = DatumGetInt32(datumArray[Anum_falcon_foreign_server_group_id - 1]);
+        entry->is_leader = DatumGetBool(datumArray[Anum_falcon_foreign_server_is_leader - 1]);
+        entry->is_valid = DatumGetBool(datumArray[Anum_falcon_foreign_server_is_valid - 1]);
     }
 
     systable_endscan(scanDesc);
