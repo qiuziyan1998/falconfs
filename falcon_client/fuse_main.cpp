@@ -512,6 +512,8 @@ int main(int argc, char *argv[])
     g_persist = config->GetBool(FalconPropertyKey::FALCON_PERSIST);
     uint32_t maxOpenNum = config->GetUint32(FalconPropertyKey::FALCON_MAX_OPEN_NUM);
     SetMaxOpenInstanceNum(maxOpenNum);
+    uint32_t ttl = config->GetUint32(FalconPropertyKey::FALCON_PRIMARY_LSN_TTL_MS);
+    SetPrimaryLsnTtlMs(ttl);
 #ifdef ZK_INIT
     std::println("Initialize with ZK");
     const char *zkEndPoint = std::getenv("zk_endpoint");

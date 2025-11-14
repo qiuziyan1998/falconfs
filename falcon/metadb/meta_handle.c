@@ -18,6 +18,7 @@
 #include "utils/rel.h"
 #include "utils/snapmgr.h"
 #include "utils/timestamp.h"
+#include "access/xlog.h"
 
 #include "dir_path_shmem/dir_path_hash.h"
 #include "distributed_backend/remote_comm_falcon.h"
@@ -622,6 +623,7 @@ void FalconStatHandle(MetaProcessInfo *infoArray, int count)
         int shardId, count, workerId[FOREIGN_SERVER_GROUP_NUM_MAX];
         SearchShardInfoByShardValue_Group(info->parentId_partId, &shardId, workerId, &count);
         bool match = false;
+        count = (info->primaryLsn == UINT64_MAX) ? 1 : count; // sent to primary
         while (count--) {
             if (workerId[count] == GetLocalServerId()) {
                 match = true;
@@ -650,6 +652,14 @@ void FalconStatHandle(MetaProcessInfo *infoArray, int count)
 
         for (int i = 0; i < list_length(entry->info); ++i) {
             MetaProcessInfo info = list_nth(entry->info, i);
+
+            if (info->primaryLsn == UINT64_MAX) {
+                /* return primary's lsn to client */
+                info->primaryLsn = GetFlushRecPtr(NULL);
+            } else if(!waitLsnReady(info->primaryLsn)) {
+                /* wait until backup's lsn >= input lsn */
+                CHECK_ERROR_CODE_WITH_CONTINUE(WAIT_LSN_TIMEDOUT);
+            }
 
             ScanKeyData scanKey[2];
             int scanKeyCount = 2;
@@ -739,6 +749,7 @@ void FalconOpenHandle(MetaProcessInfo *infoArray, int count)
         int shardId, count, workerId[FOREIGN_SERVER_GROUP_NUM_MAX];
         SearchShardInfoByShardValue_Group(info->parentId_partId, &shardId, workerId, &count);
         bool match = false;
+        count = (info->primaryLsn == UINT64_MAX) ? 1 : count; // sent to primary
         while (count--) {
             if (workerId[count] == GetLocalServerId()) {
                 match = true;
@@ -765,6 +776,14 @@ void FalconOpenHandle(MetaProcessInfo *infoArray, int count)
 
         for (int i = 0; i < list_length(entry->info); ++i) {
             MetaProcessInfo info = list_nth(entry->info, i);
+
+            if (info->primaryLsn == UINT64_MAX) {
+                /* return primary's lsn to client */
+                info->primaryLsn = GetFlushRecPtr(NULL);
+            } else if(!waitLsnReady(info->primaryLsn)) {
+                /* wait until backup's lsn >= input lsn */
+                CHECK_ERROR_CODE_WITH_CONTINUE(WAIT_LSN_TIMEDOUT);
+            }
 
             if (info->errorCode != SUCCESS)
                 continue;

@@ -14,6 +14,11 @@ extern "C" {
 #include "connection_pool/connection_pool.h"
 #include "utils/error_code.h"
 #include "utils/utils_standalone.h"
+#include "postgres.h"
+#include "catalog/pg_type.h"
+#include "utils/array.h"
+#include "utils/builtins.h"
+#include "utils/lsyscache.h"
 }
 
 PGConnection::PGConnection(PGConnectionPool *parent, const char *ip, const int port, const char *userName)
@@ -280,13 +285,61 @@ void PGConnection::BackgroundWorker()
                     std::vector<flatbuffers::Offset<flatbuffers::String>> plainCommandResponseData;
                     int row = PQntuples(res);
                     int col = PQnfields(res);
-                    for (int i = 0; i < row; ++i)
-                        for (int j = 0; j < col; ++j)
-                            plainCommandResponseData.push_back(flatBufferBuilder.CreateString(PQgetvalue(res, i, j)));
+                    int elementNum = 0; // element number of [0, 1, [2, 3]] == 4
+                    /*
+                     * res is something likes this:
+                     * [0, 1, [2, 3, -1]],
+                     * [4, 5, [6, 7, 8]],
+                     * [9, 10, [11, -1, -1]]
+                    */
+                    for (int i = 0; i < row; ++i) {
+                        for (int j = 0; j < col; ++j) {
+                            const char *field_value = PQgetvalue(res, i, j);
+                            Oid field_type = PQftype(res, j);
+                            if (field_type == INT4ARRAYOID || field_type == TEXTARRAYOID) {
+                                ArrayType *array = DatumGetArrayTypeP(PointerGetDatum(field_value));
+                                int ndim = ARR_NDIM(array);
+                                int *dims = ARR_DIMS(array);
+                                int nitems = ArrayGetNItems(ndim, dims);
+
+                                Oid element_type = ARR_ELEMTYPE(array);
+                                int16 elmlen;
+                                bool elmbyval;
+                                char elmalign;
+                                Datum *elements;
+                                bool *nulls;
+
+                                get_typlenbyvalalign(element_type, &elmlen, &elmbyval, &elmalign);
+                                deconstruct_array(array, element_type, elmlen, elmbyval, elmalign,
+                                                &elements, &nulls, &nitems);
+                                for (int k = 0; k < nitems; k++) {
+                                    if (!nulls[k]) {
+                                        if (element_type == INT4OID) {
+                                            int32 value = DatumGetInt32(elements[k]);
+                                            plainCommandResponseData.push_back(flatBufferBuilder.CreateString(std::to_string(value)));
+                                        } else if (element_type == TEXTOID) {
+                                            text *txt = DatumGetTextP(elements[k]);
+                                            char *str = text_to_cstring(txt);
+                                            plainCommandResponseData.push_back(flatBufferBuilder.CreateString(str));
+                                            pfree(str);
+                                        }
+                                    } else {
+                                        throw std::runtime_error("returned reply array contains null.");
+                                    }
+                                }
+                                pfree(elements);
+                                pfree(nulls);
+                                elementNum += nitems;
+                            } else {
+                                plainCommandResponseData.push_back(flatBufferBuilder.CreateString(field_value));
+                                elementNum++;
+                            }
+                        }
+                    }
                     auto plainCommandResponse = falcon::meta_fbs::CreatePlainCommandResponse(
                         flatBufferBuilder,
                         row,
-                        col,
+                        elementNum / row,
                         flatBufferBuilder.CreateVector(plainCommandResponseData));
                     auto metaResponse = falcon::meta_fbs::CreateMetaResponse(
                         flatBufferBuilder,

@@ -142,6 +142,7 @@ bool SerializedDataMetaParamDecode(FalconSupportMetaService metaService,
                 return false;
             }
             info->path = metaParam->param_as_PathOnlyParam()->path()->c_str();
+            info->primaryLsn = metaParam->param_as_PathOnlyParam()->primarylsn();
             break;
         }
         case FalconSupportMetaService::MKDIR_SUB_MKDIR: {

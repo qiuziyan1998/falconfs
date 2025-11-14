@@ -34,6 +34,9 @@
 #define UINT64_PRINT_SYMBOL "%llu"
 #endif
 
+#define FALCON_WAIT_LSN_TIMEOUT_MS_DEFAULT 10
+extern int FalconWaitLsnTimeoutMs;
+
 uint64_t GenerateInodeIdBySeqAndNodeId(uint64_t seq, int nodeId);
 
 int32 HashShard(uint64 parentId_partId);
@@ -76,6 +79,8 @@ Oid FalconExtensionOwner(void);
 ArrayType *build_text_array(const char **strings, int count);
 
 ArrayType *build_int_array(const int32_t *values, int count);
+
+bool waitLsnReady(const uint64_t targetLsn);
 
 typedef enum FALCON_LOCK_OPERATION { FALCON_LOCK_2PC_CLEANUP } FALCON_LOCK_OPERATION;
 

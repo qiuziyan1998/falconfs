@@ -23,6 +23,12 @@
 
 static void BrpcDummyDeleter(void *) {}
 
+int primaryLsnTtlMs = 10;
+void SetPrimaryLsnTtlMs(uint32_t ttl)
+{
+    primaryLsnTtlMs = ttl;
+}
+
 inline falcon::meta_fbs::AnyMetaParam ToFlatBuffersType(falcon::meta_proto::MetaServiceType type)
 {
     switch (type) {
@@ -223,13 +229,13 @@ Connection::Create(const char *path, uint64_t &inodeId, int32_t &nodeId, struct 
     return ProcessRequest(falcon::meta_proto::CREATE, paramBuilder, responseHandler, cache);
 }
 
-FalconErrorCode Connection::Stat(const char *path, struct stat *stbuf, ConnectionCache *cache)
+FalconErrorCode Connection::Stat(const char *path, uint64_t &primaryLsn, struct stat *stbuf, ConnectionCache *cache)
 {
-    auto paramBuilder = [path](flatbuffers::FlatBufferBuilder &builder) {
-        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path);
+    auto paramBuilder = [primaryLsn, path](flatbuffers::FlatBufferBuilder &builder) {
+        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path, primaryLsn);
     };
 
-    auto responseHandler = [stbuf](const falcon::meta_fbs::MetaResponse *metaResponse, void *) {
+    auto responseHandler = [stbuf, primaryLsn, this](const falcon::meta_fbs::MetaResponse *metaResponse, void *) {
         if (metaResponse->response_type() != falcon::meta_fbs::AnyMetaResponse_StatResponse) {
             return PROGRAM_ERROR;
         }
@@ -250,6 +256,9 @@ FalconErrorCode Connection::Stat(const char *path, struct stat *stbuf, Connectio
             stbuf->st_mtim = ConvertTimestampFromPGToUnix(statResponse->st_mtim());
             stbuf->st_ctim = ConvertTimestampFromPGToUnix(statResponse->st_ctim());
         }
+        if (primaryLsn == UINT64_MAX) {
+            cachedPrimaryLsn->update(statResponse->lsn());
+        }
         return (FalconErrorCode)metaResponse->error_code();
     };
 
@@ -257,17 +266,18 @@ FalconErrorCode Connection::Stat(const char *path, struct stat *stbuf, Connectio
 }
 
 FalconErrorCode Connection::Open(const char *path,
+                                 uint64_t &primaryLsn,
                                  uint64_t &inodeId,
                                  int64_t &size,
                                  int32_t &nodeId,
                                  struct stat *stbuf,
                                  ConnectionCache *cache)
 {
-    auto paramBuilder = [path](flatbuffers::FlatBufferBuilder &builder) {
-        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path);
+    auto paramBuilder = [primaryLsn, path](flatbuffers::FlatBufferBuilder &builder) {
+        return falcon::meta_fbs::CreatePathOnlyParamDirect(builder, path, primaryLsn);
     };
 
-    auto responseHandler = [&inodeId, &size, &nodeId, stbuf](const falcon::meta_fbs::MetaResponse *metaResponse,
+    auto responseHandler = [&inodeId, &size, &nodeId, stbuf, primaryLsn, this](const falcon::meta_fbs::MetaResponse *metaResponse,
                                                              void *) {
         if (metaResponse->response_type() != falcon::meta_fbs::AnyMetaResponse_OpenResponse) {
             return PROGRAM_ERROR;
@@ -292,6 +302,9 @@ FalconErrorCode Connection::Open(const char *path,
             stbuf->st_atim = ConvertTimestampFromPGToUnix(openResponse->st_atim());
             stbuf->st_mtim = ConvertTimestampFromPGToUnix(openResponse->st_mtim());
             stbuf->st_ctim = ConvertTimestampFromPGToUnix(openResponse->st_ctim());
+        }
+        if (primaryLsn == UINT64_MAX) {
+            cachedPrimaryLsn->update(openResponse->lsn());
         }
 
         return (FalconErrorCode)metaResponse->error_code();

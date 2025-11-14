@@ -35,6 +35,7 @@ table StatResponse {
     st_atim: uint64;
     st_mtim: uint64;
     st_ctim: uint64;
+    lsn: uint64;
 }
 table OpenResponse {
     st_ino: uint64;
@@ -51,6 +52,7 @@ table OpenResponse {
     st_atim: uint64;
     st_mtim: uint64;
     st_ctim: uint64;
+    lsn: uint64;
 }
 table UnlinkResponse {
     st_ino: uint64;

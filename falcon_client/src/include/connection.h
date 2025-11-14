@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <iostream>
 
 #include <sys/stat.h>
 
@@ -16,6 +17,10 @@
 #include "falcon_meta_rpc.pb.h"
 #include "remote_connection_utils/error_code_def.h"
 #include "remote_connection_utils/serialized_data.h"
+#include "expiring_cache/expiring_cache.h"
+
+extern int primaryLsnTtlMs;
+void SetPrimaryLsnTtlMs(uint32_t ttl);
 
 struct ServerIdentifier
 {
@@ -83,6 +88,9 @@ class Connection {
     }
     ~Connection() = default;
 
+    std::shared_ptr<ExpiringCache<uint64_t>> cachedPrimaryLsn = \
+        std::make_shared<ExpiringCache<uint64_t>>(std::chrono::milliseconds(primaryLsnTtlMs));
+
     class PlainCommandResult {
         friend Connection;
 
@@ -102,8 +110,9 @@ class Connection {
     FalconErrorCode Mkdir(const char *path, ConnectionCache *cache = nullptr);
     FalconErrorCode
     Create(const char *path, uint64_t &inodeId, int32_t &nodeId, struct stat *stbuf, ConnectionCache *cache = nullptr);
-    FalconErrorCode Stat(const char *path, struct stat *stbuf, ConnectionCache *cache = nullptr);
+    FalconErrorCode Stat(const char *path, uint64_t &primaryLsn, struct stat *stbuf, ConnectionCache *cache = nullptr);
     FalconErrorCode Open(const char *path,
+                         uint64_t &primaryLsn,
                          uint64_t &inodeId,
                          int64_t &size,
                          int32_t &nodeId,

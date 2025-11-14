@@ -17,6 +17,8 @@ typedef struct OneReadDirResult
 typedef struct MetaProcessInfoData
 {
     // input
+    uint64_t primaryLsn;
+
     const char *path;
     uint64_t parentId;
     const char *plainCommand;

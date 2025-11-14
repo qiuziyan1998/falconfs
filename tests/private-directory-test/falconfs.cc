@@ -48,7 +48,9 @@ int dfs_open(const char *path, int flags, mode_t mode)
     int32_t nodeId;
     struct stat st;
     // memset(&st, 0, sizeof(st));
-    int errorCode = conn->Open(path, inodeId, size, nodeId, &st);
+    uint64_t primaryLsn = UINT64_MAX;
+    conn->cachedPrimaryLsn->get(primaryLsn);
+    int errorCode = conn->Open(path, primaryLsn, inodeId, size, nodeId, &st);
     return errorCode;
 }
 
@@ -143,7 +145,9 @@ int dfs_stat(const char *path, struct stat *stbuf)
         std::cout << "route error.\n";
         return PROGRAM_ERROR;
     }
-    int errorCode = conn->Stat(path, stbuf);
+    uint64_t primaryLsn = UINT64_MAX;
+    conn->cachedPrimaryLsn->get(primaryLsn);
+    int errorCode = conn->Stat(path, primaryLsn, stbuf);
     return errorCode;
 }
 

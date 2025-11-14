@@ -81,4 +81,7 @@ class FalconPropertyKey : public PropertyKey {
 
     inline static const auto FALCON_PROMETHEUS_PORT =
         PropertyKey::Builder("main", "falcon_prometheus_port", FALCON, FALCON_STRING).build();
+
+    inline static const auto FALCON_PRIMARY_LSN_TTL_MS =
+        PropertyKey::Builder("main", "falcon_primary_lsn_ttl_ms", FALCON, FALCON_UINT).build();
 };

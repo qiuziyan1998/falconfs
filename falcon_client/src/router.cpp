@@ -31,16 +31,25 @@ int Router::FetchShardTable(std::shared_ptr<Connection> conn)
     int lastShardMaxValue = INT32_MIN;
 
     std::unique_lock<std::shared_mutex> lock(mapMtx);
-    auto tmpRouteMap = routeMap;
+    auto oldRouteMap = routeMap;
     shardTable.clear();
     routeMap.clear();
     for (const auto i : std::views::iota(0, shardCount)) {
         const int shardMinValue = StringToInt32(response->data()->Get(i * col + 0)->c_str());
         const int shardMaxValue = StringToInt32(response->data()->Get(i * col + 1)->c_str());
 
-        ServerIdentifier server(response->data()->Get(i * col + 2)->c_str(),
-                                StringToInt32(response->data()->Get(i * col + 3)->c_str()) + 10,
-                                StringToInt32(response->data()->Get(i * col + 4)->c_str()));
+        // shardMinValue, shardMaxValue, ip0, ip1, ip2, port0, port1, port2, id0, id1, id2
+        const int serverNumber = (col - 2) / 2;
+        std::vector<ServerIdentifier> serverList;
+        for (int i = 0; i < serverNumber; i++) {
+            if (StringToInt32(response->data()->Get(i * col + 2 + serverNumber * 2 + i)->c_str()) == -1) {
+                /* invalid replica */
+                continue;
+            }
+            serverList.emplace_back(response->data()->Get(i * col + 2 + i)->c_str(),
+                                    StringToInt32(response->data()->Get(i * col + 2 + serverNumber + i)->c_str()) + 10,
+                                    StringToInt32(response->data()->Get(i * col + 2 + serverNumber * 2 + i)->c_str()));
+        }
 
         // Validate shard ranges
         if (lastShardMaxValue != INT32_MIN && lastShardMaxValue + 1 != shardMinValue) {
@@ -48,14 +57,20 @@ int Router::FetchShardTable(std::shared_ptr<Connection> conn)
         }
 
         if (lastShardMaxValue == INT32_MIN && shardMinValue != INT32_MIN) {
-            shardTable.emplace(shardMinValue - 1, ServerIdentifier("", 0, -1));
+            shardTable.emplace(shardMinValue - 1, std::vector({ServerIdentifier("", 0, -1)}));
         }
 
-        shardTable.emplace(shardMaxValue, server);
-        if (!tmpRouteMap.empty() && tmpRouteMap.contains(server)) {
-            routeMap.try_emplace(server, tmpRouteMap[server]);
-        } else {
-            routeMap.try_emplace(server, std::make_shared<Connection>(server));
+        shardTable.emplace(shardMaxValue, serverList);
+        // leader and followers' connections share lsn of primary
+        std::shared_ptr<ExpiringCache<uint64_t>> primaryLsn = \
+            std::make_shared<ExpiringCache<uint64_t>>(std::chrono::milliseconds(primaryLsnTtlMs));
+        for (auto &server : serverList) {
+            if (!oldRouteMap.empty() && oldRouteMap.contains(server)) {
+                routeMap.try_emplace(server, oldRouteMap[server]);
+            } else {
+                routeMap.try_emplace(server, std::make_shared<Connection>(server));
+            }
+            routeMap[server]->cachedPrimaryLsn = primaryLsn;
         }
         lastShardMaxValue = shardMaxValue;
     }
@@ -100,11 +115,55 @@ std::shared_ptr<Connection> Router::GetWorkerConnByPath(std::string_view path)
     }
 
     // Return connection
-    if (auto connIt = routeMap.find(shardIt->second); connIt != routeMap.end()) {
+    if (auto connIt = routeMap.find(shardIt->second[0]); connIt != routeMap.end()) {
         return connIt->second;
     }
-
+    return nullptr;
     throw std::runtime_error("no such server.");
+}
+
+std::vector<std::shared_ptr<Connection>> Router::GetWorkerConnByPath_Backup(std::string_view path)
+{
+    if (path.empty() || path[0] != '/') {
+        return {};
+    }
+
+    // Normalize path
+    if (path.size() > 1 && path.back() == '/') {
+        path.remove_suffix(1);
+    }
+
+    // Extract filename
+    auto last_slash = path.find_last_of('/');
+    auto [dir, filename] = std::pair(path.substr(0, last_slash ? last_slash - 1 : 0), path.substr(last_slash + 1));
+
+    if (filename.empty() && dir.empty()) {
+        filename = "/";
+    }
+
+    // Find shard
+    std::shared_lock<std::shared_mutex> lock(mapMtx);
+    uint16_t partId = HashPartId(filename.data());
+    auto shardIt = shardTable.lower_bound(HashInt8(partId));
+    if (shardIt == shardTable.end()) {
+        throw std::runtime_error("shard table is corrupt.");
+    }
+
+    // send to leader or follower, with primary's lsn
+    static std::atomic<uint64_t> counter = 0;
+    uint64_t index = counter.fetch_add(1, std::memory_order_relaxed);
+    ServerIdentifier targetServer = shardIt->second[index % shardIt->second.size()];
+    ServerIdentifier primaryServer = shardIt->second[0];
+
+    std::vector<std::shared_ptr<Connection>> ret;
+    // Return connection
+    if (auto connIt = routeMap.find(targetServer); connIt != routeMap.end()) {
+        ret.push_back(connIt->second);
+    }
+    if (auto connIt = routeMap.find(primaryServer); connIt != routeMap.end()) {
+        ret.push_back(connIt->second);
+    }
+    return ret;
 }
 
 int Router::GetAllWorkerConnection(std::unordered_map<std::string, std::shared_ptr<Connection>> &workerInfo)

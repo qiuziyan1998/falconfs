@@ -40,6 +40,8 @@
 #include "metadb/xattr_table.h"
 #include "utils/error_log.h"
 
+int FalconWaitLsnTimeoutMs = FALCON_WAIT_LSN_TIMEOUT_MS_DEFAULT;
+
 uint64_t GenerateInodeIdBySeqAndNodeId(uint64_t seq, int nodeId) { return (seq << 12) | (nodeId & 0xFFF); }
 
 int32 HashShard(uint64 parentId_partId)
@@ -439,4 +441,33 @@ ArrayType *build_int_array(const int32_t *values, int count)
     ArrayType *result = construct_array(datums, count, INT4OID, 4, true, 'i');
     pfree(datums);
     return result;
+}
+
+bool waitLsnReady(const uint64_t targetLsn)
+{
+    long startTime;
+    long currentTime;
+    bool timedOut = false;
+
+    startTime = GetCurrentTimestamp() / 1000;  // ms
+
+    for (;;) {
+        if (GetFlushRecPtr(NULL) >= targetLsn)
+            break;
+
+        if (FalconWaitLsnTimeoutMs > 0) {
+            currentTime = GetCurrentTimestamp() / 1000;
+            if ((currentTime - startTime) >= FalconWaitLsnTimeoutMs)
+            {
+                timedOut = true;
+                break;
+            }
+        }
+
+        CHECK_FOR_INTERRUPTS();
+
+        pg_usleep(10L);  // 10us
+    }
+    
+    return !timedOut;
 }

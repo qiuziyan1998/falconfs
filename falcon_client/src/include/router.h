@@ -38,7 +38,7 @@ struct InodeIdentifierHash
 class Router {
   private:
     std::shared_ptr<Connection> coordinatorConn;
-    std::map<int, ServerIdentifier> shardTable;
+    std::map<int, std::vector<ServerIdentifier>> shardTable;
     std::unordered_map<ServerIdentifier, std::shared_ptr<Connection>, ServerIdentifierHash> routeMap;
     std::shared_mutex coordinatorMtx;
     std::shared_mutex mapMtx;
@@ -51,6 +51,7 @@ class Router {
     std::shared_ptr<Connection> GetCoordinatorConn();
 
     std::shared_ptr<Connection> GetWorkerConnByPath(std::string_view path);
+    std::vector<std::shared_ptr<Connection>> GetWorkerConnByPath_Backup(std::string_view path);
 
     int GetAllWorkerConnection(std::unordered_map<std::string, std::shared_ptr<Connection>> &workerInfo);
 

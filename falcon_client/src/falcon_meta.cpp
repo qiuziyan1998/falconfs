@@ -131,31 +131,38 @@ int FalconCreate(const std::string &path, uint64_t &fd, int oflags, struct stat 
 
 int FalconGetStat(const std::string &path, struct stat *stbuf)
 {
-    std::shared_ptr<Connection> conn = router->GetWorkerConnByPath(path);
-    if (!conn) {
+    std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
+    if (conns.size() != 2) {
         FALCON_LOG(LOG_ERROR) << "route error";
         return PROGRAM_ERROR;
     }
-    int errorCode = conn->Stat(path.c_str(), stbuf);
+    int errorCode = SERVER_FAULT;
+    uint64_t primaryLsn = UINT64_MAX;
+    if (conns[0]->cachedPrimaryLsn->get(primaryLsn)) {
+        errorCode = conns[0]->Stat(path.c_str(), primaryLsn, stbuf);
+    }
+    if (errorCode != SUCCESS) {
+        errorCode = conns[1]->Stat(path.c_str(), primaryLsn, stbuf);
+    }
 #ifdef ZK_INIT
     int cnt = 0;
     while (cnt < RETRY_CNT && errorCode == SERVER_FAULT) {
         ++cnt;
         sleep(SLEEPTIME);
-        conn = router->TryToUpdateWorkerConn(conn);
-        errorCode = conn->Stat(path.c_str(), stbuf);
+        conns[1] = router->TryToUpdateWorkerConn(conns[1]);
+        errorCode = conns[1]->Stat(path.c_str(), primaryLsn, stbuf);
     }
 #endif
     if (errorCode != SUCCESS && errorCode != FILE_NOT_EXISTS) {
-        FALCON_LOG(LOG_ERROR) << "FalconGetStat failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+        FALCON_LOG(LOG_ERROR) << "FalconGetStat failed for path: " << path << ", DN: " << conns[1]->server.id << ", ip: " << conns[1]->server.ip << ", error code: " << errorCode;
     }
     return errorCode;
 }
 
 int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *stbuf)
 {
-    std::shared_ptr<Connection> conn = router->GetWorkerConnByPath(path);
-    if (!conn) {
+    std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
+    if (conns.size() != 2) {
         FALCON_LOG(LOG_ERROR) << "route error";
         return PROGRAM_ERROR;
     }
@@ -168,19 +175,26 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
     uint64_t inodeId = 0;
     int64_t size = 0;
     int32_t nodeId = 0;
-    int errorCode = conn->Open(path.c_str(), inodeId, size, nodeId, stbuf);
+    int errorCode = SERVER_FAULT;
+    uint64_t primaryLsn = UINT64_MAX;
+    if (conns[0]->cachedPrimaryLsn->get(primaryLsn)) {
+        errorCode = conns[0]->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
+    }
+    if (errorCode != SUCCESS) {
+        errorCode = conns[1]->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
+    }
 #ifdef ZK_INIT
     int cnt = 0;
     while (cnt < RETRY_CNT && errorCode == SERVER_FAULT) {
         ++cnt;
         sleep(SLEEPTIME);
-        conn = router->TryToUpdateWorkerConn(conn);
-        errorCode = conn->Open(path.c_str(), inodeId, size, nodeId, stbuf);
+        conns[1] = router->TryToUpdateWorkerConn(conns[1]);
+        errorCode = conns[1]->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
     }
 #endif
     if (errorCode != SUCCESS) {
         FalconFd::GetInstance()->ReleaseOpenInstance();
-        FALCON_LOG(LOG_ERROR) << "FalconOpen failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
+        FALCON_LOG(LOG_ERROR) << "FalconOpen failed for path: " << path << ", DN: " << conns[1]->server.id << ", ip: " << conns[1]->server.ip << ", error code: " << errorCode;
     }
     openInstance->inodeId = inodeId;
     openInstance->originalSize = size;

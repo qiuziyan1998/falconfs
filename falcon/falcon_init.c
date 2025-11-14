@@ -26,6 +26,7 @@
 #include "utils/path_parse.h"
 #include "utils/rwlock.h"
 #include "utils/shmem_control.h"
+#include "utils/utils.h"
 
 PG_MODULE_MAGIC;
 
@@ -273,4 +274,17 @@ static void RegisterFalconConfigVariables(void)
                             NULL,
                             NULL);
     FalconConnectionPoolShmemSize = (uint64_t)FalconConnectionPoolShmemSizeInMB * 1024 * 1024;
+
+    DefineCustomIntVariable("falcon_standby_read.wait_lsn_timeout_ms",
+                            gettext_noop("Timeout for standby lsn to catch up with primary lsn."),
+                            NULL,
+                            &FalconWaitLsnTimeoutMs,
+                            FALCON_WAIT_LSN_TIMEOUT_MS_DEFAULT,
+                            1,
+                            256,
+                            PGC_POSTMASTER,
+                            0,
+                            NULL,
+                            NULL,
+                            NULL);
 }
