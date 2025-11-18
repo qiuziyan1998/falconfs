@@ -44,6 +44,8 @@ class Router {
     std::shared_mutex mapMtx;
 
   public:
+    Router(const std::shared_ptr<Connection> conn);
+  
     Router(const ServerIdentifier &coordinator);
 
     int FetchShardTable(std::shared_ptr<Connection> conn);
@@ -60,6 +62,8 @@ class Router {
     std::shared_ptr<Connection> TryToUpdateWorkerConn(std::shared_ptr<Connection> conn);
 
     std::shared_ptr<Connection> GetWorkerConnBySvrId(int id);
+
+    std::vector<ServerIdentifier> FetchServerFromRow(int row, int col, const falcon::meta_fbs::PlainCommandResponse *response);
 
     ~Router() = default;
 };

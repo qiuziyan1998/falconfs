@@ -608,11 +608,7 @@ class FalconCM:
             )
         )
         if self._replica_server_num > 0 and len(candidates) >= (
-<<<<<<< HEAD
             self._replica_server_num // 2 + 1
-=======
-            self._replica_server_num / 2
->>>>>>> 78a0e1a (Implement cluster manage for standby read.)
         ):
             max_lsn = 0
             new_leader_host_port = ""

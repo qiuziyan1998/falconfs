@@ -11,10 +11,32 @@
 #include "log/logging.h"
 #include "utils.h"
 
+Router::Router(const std::shared_ptr<Connection> conn)
+{
+    coordinatorConn = conn;
+}
+
 Router::Router(const ServerIdentifier &coordinator)
     : coordinatorConn(std::make_shared<Connection>(coordinator))
 {
     FetchShardTable(coordinatorConn);
+}
+
+std::vector<ServerIdentifier> Router::FetchServerFromRow(int row, int col, const falcon::meta_fbs::PlainCommandResponse *response)
+{
+    // row: shardMinValue, shardMaxValue, ip0, ip1, ip2, port0, port1, port2, id0, id1, id2
+    const int serverNumber = (col - 2) / 3;
+    std::vector<ServerIdentifier> serverList;
+    for (int i = 0; i < serverNumber; i++) {
+        if (StringToInt32(response->data()->Get(row * col + 2 + serverNumber * 2 + i)->c_str()) == -1) {
+            /* invalid replica */
+            continue;
+        }
+        serverList.emplace_back(response->data()->Get(row * col + 2 + i)->c_str(),
+                                StringToInt32(response->data()->Get(row * col + 2 + serverNumber + i)->c_str()) + 10,
+                                StringToInt32(response->data()->Get(row * col + 2 + serverNumber * 2 + i)->c_str()));
+    }
+    return serverList;
 }
 
 int Router::FetchShardTable(std::shared_ptr<Connection> conn)
@@ -34,22 +56,11 @@ int Router::FetchShardTable(std::shared_ptr<Connection> conn)
     auto oldRouteMap = routeMap;
     shardTable.clear();
     routeMap.clear();
-    for (const auto i : std::views::iota(0, shardCount)) {
-        const int shardMinValue = StringToInt32(response->data()->Get(i * col + 0)->c_str());
-        const int shardMaxValue = StringToInt32(response->data()->Get(i * col + 1)->c_str());
+    for (const auto row : std::views::iota(0, shardCount)) {
+        const int shardMinValue = StringToInt32(response->data()->Get(row * col + 0)->c_str());
+        const int shardMaxValue = StringToInt32(response->data()->Get(row * col + 1)->c_str());
 
-        // shardMinValue, shardMaxValue, ip0, ip1, ip2, port0, port1, port2, id0, id1, id2
-        const int serverNumber = (col - 2) / 2;
-        std::vector<ServerIdentifier> serverList;
-        for (int i = 0; i < serverNumber; i++) {
-            if (StringToInt32(response->data()->Get(i * col + 2 + serverNumber * 2 + i)->c_str()) == -1) {
-                /* invalid replica */
-                continue;
-            }
-            serverList.emplace_back(response->data()->Get(i * col + 2 + i)->c_str(),
-                                    StringToInt32(response->data()->Get(i * col + 2 + serverNumber + i)->c_str()) + 10,
-                                    StringToInt32(response->data()->Get(i * col + 2 + serverNumber * 2 + i)->c_str()));
-        }
+        std::vector<ServerIdentifier> serverList = FetchServerFromRow(row, col, response);
 
         // Validate shard ranges
         if (lastShardMaxValue != INT32_MIN && lastShardMaxValue + 1 != shardMinValue) {

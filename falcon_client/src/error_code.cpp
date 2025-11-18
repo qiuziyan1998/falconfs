@@ -96,6 +96,9 @@ int ErrorCodeToErrno(int errorCode)
     case PATH_NOT_EXISTS:
         ret = ENOENT;
         break;
+    case WAIT_LSN_TIMEDOUT:
+        ret = ETIMEDOUT;
+        break;
     default:
         ret = EIO;
         break;

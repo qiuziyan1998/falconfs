@@ -288,9 +288,9 @@ void PGConnection::BackgroundWorker()
                     int elementNum = 0; // element number of [0, 1, [2, 3]] == 4
                     /*
                      * res is something likes this:
-                     * [0, 1, [2, 3, -1]],
+                     * [[0, 1, [2, 3, -1]],
                      * [4, 5, [6, 7, 8]],
-                     * [9, 10, [11, -1, -1]]
+                     * [9, 10, [11, -1, -1]]]
                     */
                     for (int i = 0; i < row; ++i) {
                         for (int j = 0; j < col; ++j) {
@@ -336,10 +336,11 @@ void PGConnection::BackgroundWorker()
                             }
                         }
                     }
+                    elementNum = row == 0 ? elementNum : elementNum / row;
                     auto plainCommandResponse = falcon::meta_fbs::CreatePlainCommandResponse(
                         flatBufferBuilder,
                         row,
-                        elementNum / row,
+                        elementNum,
                         flatBufferBuilder.CreateVector(plainCommandResponseData));
                     auto metaResponse = falcon::meta_fbs::CreateMetaResponse(
                         flatBufferBuilder,
