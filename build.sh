@@ -21,7 +21,7 @@ export CONFIG_FILE="$FALCONFS_DIR/config/config.json"
 BUILD_DIR="${BUILD_DIR:-$FALCONFS_DIR/build}"
 
 # Set default PostgreSQL install directory
-PG_INSTALL_DIR="${PG_INSTALL_DIR:-$HOME/metadb}"
+export PG_INSTALL_DIR="${PG_INSTALL_DIR:-$HOME/metadb}"
 
 gen_proto() {
     mkdir -p "$BUILD_DIR"
@@ -41,24 +41,30 @@ build_pg() {
     rm -rf "$POSTGRES_SRC_DIR/contrib/falcon"
     cp -rf "$FALCONFS_DIR/falcon" "$POSTGRES_SRC_DIR/contrib/falcon"
 
-    # 设置构建选项
+    # set build options
     if [[ "$BLD_OPT" == "debug" ]]; then
         CONFIGURE_OPTS+=(--enable-debug)
     fi
 
-    # 进入源码目录
+    # enter source directory
     cd "$POSTGRES_SRC_DIR" || exit 1
 
-    # 清理旧配置
+    # clean previous build artifacts if any
     if [[ -f "config.status" ]]; then
         make distclean || true
     fi
 
-    # 生成配置并构建
+    # generate Configure and build PostgreSQL
     ./configure --prefix=${PG_INSTALL_DIR} "${CONFIGURE_OPTS[@]}" &&
         make -j$(nproc) &&
         cd "$POSTGRES_SRC_DIR/contrib" && make -j
     echo "PostgreSQL build complete."
+
+    # build brpc communication plugin.
+    # later when HCom plugin is provided, need to modify here to choose different communication plugins through configuration
+    echo "Building brpc communication plugin..."
+    cd "$POSTGRES_SRC_DIR/contrib/falcon" && make -f MakefilePlugin.brpc
+    echo "build brpc communication plugin complete."
 }
 
 clean_pg() {
@@ -71,7 +77,7 @@ clean_pg() {
     echo "PostgreSQL clean complete."
 }
 
-# 构建 FalconFS
+# build_falconfs
 build_falconfs() {
     gen_proto
     echo "Building FalconFS (mode: $BUILD_TYPE)..."
@@ -88,7 +94,7 @@ build_falconfs() {
     echo "FalconFS build complete."
 }
 
-# 清理 FalconFS
+# clean_falconfs
 clean_falconfs() {
     echo "Cleaning FalconFS..."
     rm -rf "$BUILD_DIR"
@@ -107,6 +113,12 @@ install_pg() {
         make install
     cd "$POSTGRES_SRC_DIR/contrib" && make install
     echo "PostgreSQL installed to $PG_INSTALL_DIR"
+
+    # install brpc communication plugin.
+    # later when HCom plugin is provided, need to modify here to choose different communication plugins through configuration
+    echo "copy brpc communication plugin to $PG_INSTALL_DIR/lib/postgresql..."
+    cp "$POSTGRES_SRC_DIR/contrib/falcon/libbrpcplugin.so" "$PG_INSTALL_DIR/lib/postgresql/"
+    echo "brpc communication plugin copied."
 }
 
 clean_dist() {
@@ -154,7 +166,7 @@ print_help() {
         echo "  $0 clean dist     # Remove installed PostgreSQL"
         ;;
     *)
-        # 主帮助信息
+        # General help information
         echo "Usage: $0 <command> [subcommand] [options]"
         echo ""
         echo "Commands:"
@@ -168,7 +180,7 @@ print_help() {
     esac
 }
 
-# 命令分发
+# Dispatch commands
 case "$COMMAND" in
 build)
     # Process shared build options (only debug/deploy allowed for combined build)
