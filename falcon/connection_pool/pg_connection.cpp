@@ -19,6 +19,7 @@ extern "C" {
 #include "utils/array.h"
 #include "utils/builtins.h"
 #include "utils/lsyscache.h"
+#include "utils/utils_standalone.h"
 }
 
 PGConnection::PGConnection(PGConnectionPool *parent, const char *ip, const int port, const char *userName)
@@ -296,40 +297,16 @@ void PGConnection::BackgroundWorker()
                         for (int j = 0; j < col; ++j) {
                             const char *field_value = PQgetvalue(res, i, j);
                             Oid field_type = PQftype(res, j);
-                            if (field_type == INT4ARRAYOID || field_type == TEXTARRAYOID) {
-                                ArrayType *array = DatumGetArrayTypeP(PointerGetDatum(field_value));
-                                int ndim = ARR_NDIM(array);
-                                int *dims = ARR_DIMS(array);
-                                int nitems = ArrayGetNItems(ndim, dims);
-
-                                Oid element_type = ARR_ELEMTYPE(array);
-                                int16 elmlen;
-                                bool elmbyval;
-                                char elmalign;
-                                Datum *elements;
-                                bool *nulls;
-
-                                get_typlenbyvalalign(element_type, &elmlen, &elmbyval, &elmalign);
-                                deconstruct_array(array, element_type, elmlen, elmbyval, elmalign,
-                                                &elements, &nulls, &nitems);
-                                for (int k = 0; k < nitems; k++) {
-                                    if (!nulls[k]) {
-                                        if (element_type == INT4OID) {
-                                            int32 value = DatumGetInt32(elements[k]);
-                                            plainCommandResponseData.push_back(flatBufferBuilder.CreateString(std::to_string(value)));
-                                        } else if (element_type == TEXTOID) {
-                                            text *txt = DatumGetTextP(elements[k]);
-                                            char *str = text_to_cstring(txt);
-                                            plainCommandResponseData.push_back(flatBufferBuilder.CreateString(str));
-                                            pfree(str);
-                                        }
-                                    } else {
-                                        throw std::runtime_error("returned reply array contains null.");
-                                    }
+                            if (field_type == TEXTARRAYOID || field_type == INT4ARRAYOID) {
+                                StringArray parsed = parse_text_array_direct(field_value);
+                                if (parsed.count == 0) {
+                                    throw std::runtime_error("PlainCommand reply array parse error.");
                                 }
-                                pfree(elements);
-                                pfree(nulls);
-                                elementNum += nitems;
+                                for (int k = 0; k < parsed.count; k++) {
+                                    plainCommandResponseData.push_back(flatBufferBuilder.CreateString(parsed.elements[k]));
+                                }
+                                elementNum += parsed.count;
+                                free_string_array(&parsed);
                             } else {
                                 plainCommandResponseData.push_back(flatBufferBuilder.CreateString(field_value));
                                 elementNum++;

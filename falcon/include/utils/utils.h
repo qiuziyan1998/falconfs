@@ -76,9 +76,9 @@ void hash_clear(HTAB *htab);
 
 Oid FalconExtensionOwner(void);
 
-ArrayType *build_text_array(const char **strings, int count);
+ArrayType *build_text_array(const char strings[][HOST_MAX_LENGTH], uint32_t count);
 
-ArrayType *build_int_array(const int32_t *values, int count);
+ArrayType *build_int_array(const int32_t *values, uint32_t count);
 
 bool waitLsnReady(const uint64_t targetLsn);
 

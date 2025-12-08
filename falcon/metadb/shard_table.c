@@ -164,6 +164,7 @@ Datum falcon_renew_shard_table(PG_FUNCTION_ARGS)
         }
         LWLockAcquire(&ShardTableShmemControl->lock, AccessShareLock);
 
+        List *shardIdList = NIL;
         int32_t rangeLow = SHARD_TABLE_RANGE_MIN;
         for (int i = 0; i < *ShardTableShmemCacheCount; i++) {
             FormData_falcon_shard_table *shardTableRow = ShardTableShmemCache + i;
@@ -173,29 +174,32 @@ Datum falcon_renew_shard_table(PG_FUNCTION_ARGS)
             shardInfo->rangeMin = rangeLow;
             shardInfo->rangeMax = shardTableRow->range_point;
             shardInfo->count = shardTableRow->server_ids.count;
-            for (int i = 0; i < shardTableRow->server_ids.count; i++) {
-                shardInfo->serverIds[i] = shardTableRow->server_ids.servers[i];
+
+            List *serverListPerShard = NIL;
+            for (int j = 0; j < shardTableRow->server_ids.count; j++) {
+                shardInfo->serverIds[j] = shardTableRow->server_ids.servers[j];
+                serverListPerShard = lappend_int(serverListPerShard, shardTableRow->server_ids.servers[j]);
             }
             rangeLow = shardTableRow->range_point + 1;
 
             returnInfoList = lappend(returnInfoList, shardInfo);
+            shardIdList = lappend(shardIdList, serverListPerShard);
         }
 
         LWLockRelease(&ShardTableShmemControl->lock);
 
-        List *shardIdList = GetAllForeignServerId_Group(false, true);
         List *connectionInfoList = GetForeignServerConnectionInfo(shardIdList);
         for (int i = 0; i < list_length(returnInfoList); ++i) {
             ShardInfo *shardInfo = list_nth(returnInfoList, i);
             List *groupConnectionInfo = list_nth(connectionInfoList, i);
 
             ListCell *cell;
-            int i = 0;
+            int j = 0;
             foreach(cell, groupConnectionInfo) {
                 ForeignServerConnectionInfo *connectionInfo = lfirst(cell);
-                shardInfo->ports[i] = connectionInfo->port;
-                strcpy(shardInfo->hosts[i], connectionInfo->host);
-                i++;
+                shardInfo->ports[j] = connectionInfo->port;
+                strcpy(shardInfo->hosts[j], connectionInfo->host);
+                j++;
             }
         }
 
@@ -215,7 +219,7 @@ Datum falcon_renew_shard_table(PG_FUNCTION_ARGS)
         values[1] = Int32GetDatum(shardInfo->rangeMax);
 
         // return all servers in a group
-        values[2] = PointerGetDatum(build_text_array((const char **)shardInfo->hosts, shardInfo->count));
+        values[2] = PointerGetDatum(build_text_array(shardInfo->hosts, shardInfo->count));
         values[3] = PointerGetDatum(build_int_array(shardInfo->ports, shardInfo->count));
         values[4] = PointerGetDatum(build_int_array(shardInfo->serverIds, shardInfo->count));
 
@@ -223,6 +227,8 @@ Datum falcon_renew_shard_table(PG_FUNCTION_ARGS)
         SRF_RETURN_NEXT(functionContext, HeapTupleGetDatum(heapTupleRes));
     }
 
+    list_free_deep(returnInfoList);
+    functionContext->user_fctx = NULL;
     SRF_RETURN_DONE(functionContext);
 }
 
@@ -308,7 +314,7 @@ List *GetShardTableData()
     for (int i = 0; i < *ShardTableShmemCacheCount; i++) {
         FormData_falcon_shard_table *shardTableRow = ShardTableShmemCache + i;
 
-        FormData_falcon_shard_table *data = palloc(sizeof(FormData_falcon_shard_table));
+        FormData_falcon_shard_table *data = (FormData_falcon_shard_table *)palloc(sizeof(FormData_falcon_shard_table));
         data->range_point = shardTableRow->range_point;
         data->server_ids = shardTableRow->server_ids;
         result = lappend(result, data);

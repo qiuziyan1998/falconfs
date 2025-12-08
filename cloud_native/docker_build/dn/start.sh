@@ -39,6 +39,7 @@ else
     echo "falcon_connection_pool.wait_adjust = 1" >>/home/falconMeta/data/metadata/postgresql.conf
     echo "falcon_connection_pool.wait_min = 1" >>/home/falconMeta/data/metadata/postgresql.conf
     echo "falcon_connection_pool.wait_max = 500" >>/home/falconMeta/data/metadata/postgresql.conf
+    echo "falcon_standby_read.wait_lsn_timeout_ms = 10" >>/home/falconMeta/data/metadata/postgresql.conf
     pg_ctl start -D /home/falconMeta/data/metadata
 fi
 

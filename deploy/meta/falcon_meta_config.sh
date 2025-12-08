@@ -8,7 +8,7 @@ uniquePortPrefix=555
 cnPortPrefix=${uniquePortPrefix}0
 cnPoolerPortPrefix=${uniquePortPrefix}1
 workerPortPrefix=${uniquePortPrefix}2
-workerPollerPortPrefix=${uniquePortPrefix}3
+workerPoolerPortPrefix=${uniquePortPrefix}3
 cnMonitorPortPrefix=${uniquePortPrefix}8
 workerMonitorPortPrefix=${uniquePortPrefix}9
 

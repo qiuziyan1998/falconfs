@@ -9,7 +9,8 @@ FalconConnectionPoolBatchSize=1024
 FalconConnectionPoolWaitAdjust=1
 FalconConnectionPoolWaitMin=1
 FalconConnectionPoolWaitMax=500
-FalconConnectionPoolShmemSize=$((256)) #unit: MB
+FalconConnectionPoolShmemSize=$((2560)) #unit: MB
+FalconStandyWaitLsnTimeoutMs=30
 username=$USER
 
 server_name_list=()
@@ -37,6 +38,8 @@ listen_addresses = '*'
 wal_level = logical
 max_replication_slots = 8
 max_wal_senders = 8
+wal_sender_timeout=300s
+wal_receiver_timeout=300s
 falcon_connection_pool.port = $cnPoolerPort
 falcon_connection_pool.pool_size = $FalconConnectionPoolSize
 falcon_connection_pool.shmem_size = $FalconConnectionPoolShmemSize
@@ -44,6 +47,7 @@ falcon_connection_pool.batch_size = $FalconConnectionPoolBatchSize
 falcon_connection_pool.wait_adjust = $FalconConnectionPoolWaitAdjust
 falcon_connection_pool.wait_min = $FalconConnectionPoolWaitMin
 falcon_connection_pool.wait_max = $FalconConnectionPoolWaitMax
+falcon_standby_read.wait_lsn_timeout_ms = $FalconStandyWaitLsnTimeoutMs
 EOF
         echo "host all all 0.0.0.0/0 trust" >>"$cnPath/pg_hba.conf"
     fi
@@ -69,7 +73,7 @@ for ((n = 0; n < ${#workerIpList[@]}; n++)); do
 
         if [[ "$workerIp" == "$localIp" ]]; then
             workerPath="${workerPathPrefix}${i}"
-            workerPoolerPort="${workerPollerPortPrefix}${i}"
+            workerPoolerPort="${workerPoolerPortPrefix}${i}"
 
             if [ ! -d "$workerPath" ]; then
                 mkdir -p "$workerPath"
@@ -83,6 +87,8 @@ listen_addresses = '*'
 wal_level = logical
 max_replication_slots = 8
 max_wal_senders = 8
+wal_sender_timeout=300s
+wal_receiver_timeout=300s
 falcon_connection_pool.port = ${workerPoolerPort}
 falcon_connection_pool.pool_size = ${FalconConnectionPoolSize}
 falcon_connection_pool.shmem_size = ${FalconConnectionPoolShmemSize}
@@ -90,6 +96,7 @@ falcon_connection_pool.batch_size = $FalconConnectionPoolBatchSize
 falcon_connection_pool.wait_adjust = $FalconConnectionPoolWaitAdjust
 falcon_connection_pool.wait_min = $FalconConnectionPoolWaitMin
 falcon_connection_pool.wait_max = $FalconConnectionPoolWaitMax
+falcon_standby_read.wait_lsn_timeout_ms = $FalconStandyWaitLsnTimeoutMs
 EOF
                 echo "host all all 0.0.0.0/0 trust" >>"${workerPath}/pg_hba.conf"
             fi
@@ -128,7 +135,8 @@ if [[ "$cnIp" == "$localIp" ]]; then
             exists=$(psql -d postgres -h "${server_ip_list[j]}" -p "${server_port_list[j]}" -tAc "$psql_cmd")
 
             if [[ "$exists" == "t" ]]; then
-                psql_cmd="select falcon_insert_foreign_server($i, '$name', '$ip', $port, $is_local, '$username');"
+                # group_id == 0 is cn
+                psql_cmd="select falcon_insert_foreign_server($i, '$name', '$ip', $port, $is_local, '$username', $i, 'true');"
                 echo "$psql_cmd"
                 psql -d postgres -h "${server_ip_list[j]}" -p "${server_port_list[j]}" -c "$psql_cmd"
             else

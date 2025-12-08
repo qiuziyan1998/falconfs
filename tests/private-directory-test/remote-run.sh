@@ -29,9 +29,7 @@ do
     done
 
     sleep 1
-    for server in "${ALL_SERVERS[@]}"; do
-        python3 send_signal.py $server $PORT
-    done
+    python3 send_signal.py $PORT ${ALL_SERVERS[@]}
 
     while true
     do

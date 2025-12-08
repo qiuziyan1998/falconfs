@@ -417,7 +417,7 @@ bool CheckWhetherTargetExistInIndex(Relation heap, Relation index, ScanKeyData *
     return targetExist;
 }
 
-ArrayType *build_text_array(const char **strings, int count)
+ArrayType *build_text_array(const char strings[][HOST_MAX_LENGTH], uint32_t count)
 {
     Datum *datums = palloc(sizeof(Datum) * count);
 
@@ -430,7 +430,7 @@ ArrayType *build_text_array(const char **strings, int count)
     return result;
 }
 
-ArrayType *build_int_array(const int32_t *values, int count)
+ArrayType *build_int_array(const int32_t *values, uint32_t count)
 {
     Datum *datums = palloc(sizeof(Datum) * count);
 

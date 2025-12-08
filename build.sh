@@ -21,7 +21,7 @@ export CONFIG_FILE="$FALCONFS_DIR/config/config.json"
 BUILD_DIR="${BUILD_DIR:-$FALCONFS_DIR/build}"
 
 # Set default PostgreSQL install directory
-PG_INSTALL_DIR="${PG_INSTALL_DIR:-$HOME/metadb}"
+export PG_INSTALL_DIR="${PG_INSTALL_DIR:-$HOME/metadb}"
 
 gen_proto() {
     mkdir -p "$BUILD_DIR"

@@ -133,7 +133,7 @@ int FalconGetStat(const std::string &path, struct stat *stbuf)
 {
     std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
     if (conns.size() != 2) {
-        FALCON_LOG(LOG_ERROR) << "route error";
+        FALCON_LOG(LOG_ERROR) << "FalconGetStat: route error, no backup conn";
         return PROGRAM_ERROR;
     }
     int errorCode = SERVER_FAULT;
@@ -163,7 +163,7 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
 {
     std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
     if (conns.size() != 2) {
-        FALCON_LOG(LOG_ERROR) << "route error";
+        FALCON_LOG(LOG_ERROR) << "FalconOpen: route error, no backup conn";
         return PROGRAM_ERROR;
     }
 

@@ -20,8 +20,8 @@
 typedef struct FormData_falcon_directory_table
 {
     int64_t parentId;
-    text name;
     int64_t inodeId;
+    text name;
 } FormData_falcon_directory_table;
 
 typedef FormData_falcon_directory_table *Form_falcon_directory_table;

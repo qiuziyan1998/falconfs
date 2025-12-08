@@ -13,7 +13,7 @@ target_link_libraries(FalconClient PUBLIC
     pq
     fuse
 )
-target_link_directories(FalconClient PUBLIC ${PG_INSTALL_PATH}/lib)
+target_link_directories(FalconClient PUBLIC ${PG_INSTALL_DIR}/lib)
 target_include_directories(FalconClient PUBLIC
     ${POSTGRES_SRC_DIR}/src/include
     ${POSTGRES_SRC_DIR}/src/interfaces/libpq

@@ -749,21 +749,10 @@ List *GetForeignServerConnectionInfo(List *foreignServerIdList)
 
     List *result = NIL;
     for (int i = 0; i < list_length(foreignServerIdList); ++i) {
-        // int32_t serverId = list_nth_int(foreignServerIdList, i);
-        ArrayType *serverId_list = list_nth(foreignServerIdList, i);
-        Oid element_type = INT4OID;
-        int16 elmlen;
-        bool elmbyval;
-        char elmalign;
-        get_typlenbyvalalign(INT4OID, &elmlen, &elmbyval, &elmalign);
-        Datum *elements;
-        bool *nulls;
-        int nelems;
-        deconstruct_array(serverId_list, element_type, elmlen, elmbyval, elmalign, &elements, &nulls, &nelems);
+        List *serverId_list = list_nth(foreignServerIdList, i);
         List *group_info = NIL;
-        for (int j = 0; j < nelems; j++) {
-            if (!nulls[j]) continue;
-            int32_t serverId = DatumGetInt32(elements[j]);
+        for (int j = 0; j < list_length(serverId_list); ++j) {
+            int32_t serverId = list_nth_int(serverId_list, j);
             bool found;
             FormData_falcon_foreign_server *foreignServerInfo =
                 hash_search(ForeignServerShmemCache, &serverId, HASH_FIND, &found);
@@ -783,8 +772,6 @@ List *GetForeignServerConnectionInfo(List *foreignServerIdList)
             group_info = lappend(group_info, info);
         }
         result = lappend(result, group_info);
-        pfree(elements);
-        pfree(nulls);
     }
 
     LWLockRelease(&ForeignServerShmemControl->lock);
@@ -877,7 +864,7 @@ List *GetAllForeignServerId_Group(bool exceptSelf, bool exceptCn)
     hashCtl.entrysize = sizeof(GroupServerEntry);
     hashCtl.hcxt = CurrentMemoryContext;
     groupHash = hash_create("ForeignServer Group Hash", 
-                          32, &hashCtl, HASH_ELEM | HASH_CONTEXT);
+                          32, &hashCtl, HASH_ELEM | HASH_CONTEXT | HASH_BLOBS);
 
     List *result = NIL;
     HASH_SEQ_STATUS status;
@@ -888,10 +875,7 @@ List *GetAllForeignServerId_Group(bool exceptSelf, bool exceptCn)
             continue;
         if (exceptCn && foreignServerInfo->group_id == 0) // we assume 0 to be cn
             continue;
-        // if (!foreignServerInfo->is_valid) {
-        //     continue;
-        // }
-        // save (group_id, server_id[]) in the return result
+        // save (group_id, server_id[]) in the groupHash
         bool found = false;
         GroupServerEntry *entry = (GroupServerEntry *)hash_search(groupHash, 
                                                                   &foreignServerInfo->group_id,
