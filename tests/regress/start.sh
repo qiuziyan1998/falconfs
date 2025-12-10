@@ -26,4 +26,4 @@ bash local-run.sh
 
 # run falcon_cm test
 export CONFIG_FILE=/opt/conf/config.json
-./bin/FalconCMUT
+./bin/FalconCMIT
