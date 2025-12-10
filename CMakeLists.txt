@@ -27,6 +27,11 @@ if(WITH_PROMETHEUS)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWITH_PROMETHEUS")
 endif()
 
+option(BUILD_TEST "Enable test compile" OFF)
+if(BUILD_TEST)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUNIT_TEST")
+endif()
+
 # ==================== Dependencies =================
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 find_package(BRPC REQUIRED)
