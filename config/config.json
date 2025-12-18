@@ -25,6 +25,7 @@
         "falcon_stat_max": true,
         "falcon_use_prometheus": true,
         "falcon_prometheus_port": "50040",
+        "falcon_read_meta_standby": false,
         "falcon_primary_lsn_ttl_ms": 50
     }
 }

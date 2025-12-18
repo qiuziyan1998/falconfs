@@ -840,7 +840,7 @@ List *GetAllForeignServerId(bool exceptSelf, bool exceptCn)
     while ((foreignServerInfo = hash_seq_search(&status)) != NULL) {
         if (exceptSelf && foreignServerInfo->is_local)
             continue;
-        if (exceptCn && foreignServerInfo->server_id == 0) // we assume 0 to be cn
+        if (exceptCn && foreignServerInfo->group_id == 0) // we assume 0 to be cn
             continue;
         if (!foreignServerInfo->is_leader)
             continue;

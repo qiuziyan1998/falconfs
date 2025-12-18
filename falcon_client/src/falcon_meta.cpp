@@ -27,6 +27,12 @@ constexpr int FILE_NUMBER_PER_WORKER = 4096;
 
 std::shared_ptr<Router> router;
 
+static bool readMetaStandby = false;
+void SetReadMetaStandby(bool readStandby)
+{
+    readMetaStandby = readStandby;
+}
+
 int FalconInit(std::string &coordinatorIp, int coordinatorPort)
 {
     int ret = FalconStore::GetInstance()->GetInitStatus();
@@ -131,70 +137,99 @@ int FalconCreate(const std::string &path, uint64_t &fd, int oflags, struct stat 
 
 int FalconGetStat(const std::string &path, struct stat *stbuf)
 {
-    std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
-    if (conns.size() != 2) {
-        FALCON_LOG(LOG_ERROR) << "FalconGetStat: route error, no backup conn";
-        return PROGRAM_ERROR;
-    }
     int errorCode = SERVER_FAULT;
-    uint64_t primaryLsn = UINT64_MAX;
-    if (conns[0]->cachedPrimaryLsn->get(primaryLsn)) {
-        errorCode = conns[0]->Stat(path.c_str(), primaryLsn, stbuf);
+    std::shared_ptr<Connection> conn;
+
+    if (readMetaStandby) {
+        std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
+        if (conns.size() != 2) {
+            FALCON_LOG(LOG_ERROR) << "FalconGetStat: route error, no backup conn";
+            return PROGRAM_ERROR;
+        }
+        conn = conns[1];
+        uint64_t primaryLsn = UINT64_MAX;
+        if (conns[0]->cachedPrimaryLsn->get(primaryLsn)) {
+            errorCode = conns[0]->Stat(path.c_str(), primaryLsn, stbuf);
+        }
+        if (errorCode != SUCCESS) {
+            errorCode = conns[1]->Stat(path.c_str(), primaryLsn, stbuf);
+        }        
+    } else {
+        conn = router->GetWorkerConnByPath(path);
+        if (!conn) {
+            FALCON_LOG(LOG_ERROR) << "route error";
+            return PROGRAM_ERROR;
+        }
+        uint64_t primaryLsn = 0;
+        errorCode = conn->Stat(path.c_str(), primaryLsn, stbuf);
     }
-    if (errorCode != SUCCESS) {
-        errorCode = conns[1]->Stat(path.c_str(), primaryLsn, stbuf);
-    }
+
 #ifdef ZK_INIT
     int cnt = 0;
     while (cnt < RETRY_CNT && errorCode == SERVER_FAULT) {
         ++cnt;
         sleep(SLEEPTIME);
-        conns[1] = router->TryToUpdateWorkerConn(conns[1]);
-        errorCode = conns[1]->Stat(path.c_str(), primaryLsn, stbuf);
+        conn = router->TryToUpdateWorkerConn(conn);
+        errorCode = conn->Stat(path.c_str(), primaryLsn, stbuf);
     }
 #endif
     if (errorCode != SUCCESS && errorCode != FILE_NOT_EXISTS) {
-        FALCON_LOG(LOG_ERROR) << "FalconGetStat failed for path: " << path << ", DN: " << conns[1]->server.id << ", ip: " << conns[1]->server.ip << ", error code: " << errorCode;
+        FALCON_LOG(LOG_ERROR) << "FalconGetStat failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
     }
     return errorCode;
 }
 
 int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *stbuf)
 {
-    std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
-    if (conns.size() != 2) {
-        FALCON_LOG(LOG_ERROR) << "FalconOpen: route error, no backup conn";
-        return PROGRAM_ERROR;
+    uint64_t inodeId = 0;
+    int64_t size = 0;
+    int32_t nodeId = 0;
+    int errorCode = SERVER_FAULT;
+    std::shared_ptr<Connection> conn;
+
+    if (readMetaStandby) {
+        std::cout << "FalconOpen: readMetaStandby" << std::endl;
+        std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
+        if (conns.size() != 2) {
+            FALCON_LOG(LOG_ERROR) << "FalconOpen: route error, no backup conn";
+            return PROGRAM_ERROR;
+        }
+        conn = conns[1];
+
+        uint64_t primaryLsn = UINT64_MAX;
+        if (conns[0]->cachedPrimaryLsn->get(primaryLsn)) {
+            errorCode = conns[0]->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
+        }
+        if (errorCode != SUCCESS) {
+            errorCode = conns[1]->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
+        }
+    } else {
+        conn = router->GetWorkerConnByPath(path);
+        if (!conn) {
+            FALCON_LOG(LOG_ERROR) << "route error";
+            return PROGRAM_ERROR;
+        }
+        uint64_t primaryLsn = 0;
+        errorCode = conn->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
+    }
+
+#ifdef ZK_INIT
+    int cnt = 0;
+    while (cnt < RETRY_CNT && errorCode == SERVER_FAULT) {
+        ++cnt;
+        sleep(SLEEPTIME);
+        conn = router->TryToUpdateWorkerConn(conn);
+        errorCode = conn->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
+    }
+#endif
+    if (errorCode != SUCCESS) {
+        FALCON_LOG(LOG_ERROR) << "FalconOpen failed for path: " << path << ", DN: " << conn->server.id << ", ip: " << conn->server.ip << ", error code: " << errorCode;
     }
 
     std::shared_ptr<OpenInstance> openInstance = FalconFd::GetInstance()->WaitGetNewOpenInstance();
     if (openInstance == nullptr) {
         FALCON_LOG(LOG_ERROR) << "new openInstance failed";
         return -EMFILE;
-    }
-    uint64_t inodeId = 0;
-    int64_t size = 0;
-    int32_t nodeId = 0;
-    int errorCode = SERVER_FAULT;
-    uint64_t primaryLsn = UINT64_MAX;
-    if (conns[0]->cachedPrimaryLsn->get(primaryLsn)) {
-        errorCode = conns[0]->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
-    }
-    if (errorCode != SUCCESS) {
-        errorCode = conns[1]->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
-    }
-#ifdef ZK_INIT
-    int cnt = 0;
-    while (cnt < RETRY_CNT && errorCode == SERVER_FAULT) {
-        ++cnt;
-        sleep(SLEEPTIME);
-        conns[1] = router->TryToUpdateWorkerConn(conns[1]);
-        errorCode = conns[1]->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
-    }
-#endif
-    if (errorCode != SUCCESS) {
-        FalconFd::GetInstance()->ReleaseOpenInstance();
-        FALCON_LOG(LOG_ERROR) << "FalconOpen failed for path: " << path << ", DN: " << conns[1]->server.id << ", ip: " << conns[1]->server.ip << ", error code: " << errorCode;
     }
     openInstance->inodeId = inodeId;
     openInstance->originalSize = size;

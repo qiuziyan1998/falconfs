@@ -514,6 +514,8 @@ int main(int argc, char *argv[])
     SetMaxOpenInstanceNum(maxOpenNum);
     uint32_t ttl = config->GetUint32(FalconPropertyKey::FALCON_PRIMARY_LSN_TTL_MS);
     SetPrimaryLsnTtlMs(ttl);
+    bool readStandby = config->GetBool(FalconPropertyKey::FALCON_READ_META_STANDBY);
+    SetReadMetaStandby(readStandby);
 #ifdef ZK_INIT
     std::println("Initialize with ZK");
     const char *zkEndPoint = std::getenv("zk_endpoint");

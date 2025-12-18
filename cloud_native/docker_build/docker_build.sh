@@ -39,10 +39,10 @@ mkdir -p $FALCONFS_DIR/tests/regress/falconfs/bin/
 mkdir -p $FALCONFS_DIR/tests/regress/falconfs/lib/
 ./ldd_copy.sh -b $FALCONFS_DIR/build/tests/private-directory-test/test_falcon -t $FALCONFS_DIR/tests/regress/falconfs/lib/
 ./ldd_copy.sh -b $FALCONFS_DIR/build/tests/private-directory-test/test_posix -t $FALCONFS_DIR/tests/regress/falconfs/lib/
-./ldd_copy.sh -b $FALCONFS_DIR/build/tests/common/FalconCMIT -t $FALCONFS_DIR/tests/regress/falconfs/lib/
+./ldd_copy.sh -b $FALCONFS_DIR/build/tests/integration/common/FalconCMIT -t $FALCONFS_DIR/tests/regress/falconfs/lib/
 cp -f $FALCONFS_DIR/build/tests/private-directory-test/test_falcon  $FALCONFS_DIR/tests/regress/falconfs/bin/
 cp -f $FALCONFS_DIR/build/tests/private-directory-test/test_posix $FALCONFS_DIR/tests/regress/falconfs/bin/
-cp -f $FALCONFS_DIR/build/tests/common/FalconCMIT $FALCONFS_DIR/tests/regress/falconfs/bin/
+cp -f $FALCONFS_DIR/build/tests/integration/common/FalconCMIT $FALCONFS_DIR/tests/regress/falconfs/bin/
 cp -f $FALCONFS_DIR/tests/private-directory-test/local-run.sh $FALCONFS_DIR/tests/regress/falconfs/
 cp -f $FALCONFS_DIR/tests/private-directory-test/send_signal.py $FALCONFS_DIR/tests/regress/falconfs/
 cp -f $FALCONFS_DIR/tests/regress/start.sh $FALCONFS_DIR/tests/regress/falconfs

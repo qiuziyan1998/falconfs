@@ -84,4 +84,7 @@ class FalconPropertyKey : public PropertyKey {
 
     inline static const auto FALCON_PRIMARY_LSN_TTL_MS =
         PropertyKey::Builder("main", "falcon_primary_lsn_ttl_ms", FALCON, FALCON_UINT).build();
+
+    inline static const auto FALCON_READ_META_STANDBY = 
+        PropertyKey::Builder("main", "falcon_read_meta_standby", FALCON, FALCON_BOOL).build();
 };

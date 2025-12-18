@@ -335,6 +335,30 @@ test)
         "$executable_file"
         echo "---------------------------------------------------------------------------------------"
     done
+    TARGET_DIR="$FALCONFS_DIR/build/tests/falcon_client/"
+    # Find executable files directly in the test directory (not in subdirectories)
+    # Exclude .cmake files and anything in CMakeFiles/
+    find "$TARGET_DIR" -maxdepth 1 -type f -executable -not -name "*.cmake" -not -path "*/CMakeFiles/*" | while read -r executable_file; do
+        echo "Executing: $executable_file"
+        "$executable_file"
+        echo "---------------------------------------------------------------------------------------"
+    done
+    TARGET_DIR="$FALCONFS_DIR/build/tests/falcon_db/"
+    # Find executable files directly in the test directory (not in subdirectories)
+    # Exclude .cmake files and anything in CMakeFiles/
+    find "$TARGET_DIR" -maxdepth 1 -type f -executable -not -name "*.cmake" -not -path "*/CMakeFiles/*" | while read -r executable_file; do
+        echo "Executing: $executable_file"
+        "$executable_file"
+        echo "---------------------------------------------------------------------------------------"
+    done
+    TARGET_DIR="$FALCONFS_DIR/build/tests/common/"
+    # Find executable files directly in the test directory (not in subdirectories)
+    # Exclude .cmake files and anything in CMakeFiles/
+    find "$TARGET_DIR" -maxdepth 1 -type f -executable -not -name "*.cmake" -not -path "*/CMakeFiles/*" | while read -r executable_file; do
+        echo "Executing: $executable_file"
+        "$executable_file"
+        echo "---------------------------------------------------------------------------------------"
+    done
     echo "All unit tests passed."
     ;;
 install)

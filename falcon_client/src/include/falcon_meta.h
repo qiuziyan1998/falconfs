@@ -85,3 +85,5 @@ int FalconChmod(const std::string &path, mode_t mode);
 int FalconTruncate(const std::string &path, off_t size);
 
 int FalconRenamePersist(const std::string &srcName, const std::string &dstName);
+
+void SetReadMetaStandby(bool readStandby);
