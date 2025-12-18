@@ -62,9 +62,6 @@ void FalconDaemonConnectionPoolProcessMain(unsigned long int main_arg)
         }
         sleep(1);
     }
-    do {
-        sleep(1);
-    } while (RecoveryInProgress());
     elog(LOG, "FalconDaemonConnectionPoolProcessMain: init finished.");
 
     FalconPGPort = PostPortNumber;

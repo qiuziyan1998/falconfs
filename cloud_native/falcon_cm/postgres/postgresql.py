@@ -235,9 +235,6 @@ def pg_promote(data_dir):
 
 def pg_basebackup(data_dir, host, port, user, slot_name):
     port = str(port)
-    connection_string = "host={} port={} user={} dbname=postgres".format(
-        host, port, user
-    )
     logging.getLogger("logger").info("start basebackup")
     shell.exec_cmd(
         "pg_basebackup -D {} -Fp -Pv -Xs -c fast -R -h {} -p {} -U {} --slot={}".format(

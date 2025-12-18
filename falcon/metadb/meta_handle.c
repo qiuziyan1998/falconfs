@@ -627,6 +627,7 @@ void FalconStatHandle(MetaProcessInfo *infoArray, int count)
         while (count--) {
             if (workerId[count] == GetLocalServerId()) {
                 match = true;
+                break;
             }
         }
         if (!match)
@@ -753,6 +754,7 @@ void FalconOpenHandle(MetaProcessInfo *infoArray, int count)
         while (count--) {
             if (workerId[count] == GetLocalServerId()) {
                 match = true;
+                break;
             }
         }
         if (!match)

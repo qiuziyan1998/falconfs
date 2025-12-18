@@ -25,14 +25,15 @@ def main():
             # leader should watch_leader_and_candidates for later election (any need?)
             falcon_cm.watch_leader_and_candidates()
 
-            # wait until all replicas inited by write_replica()
-            self.wait_until_replicas_nodes_ready()
-            # leader should watch_replicas_and_update_cn_table, no need to flush, init_filesystem will flush leader and followers
-            self.watch_replicas_and_update_cn_table(False)
-
             # wait for all nodes' falcon_cm.init_sys() done
             falcon_cm.monitor_nodes()
+            # create cns' hostNodes and dns' falcon_clusters/dn0,1,2...
             falcon_cm.build_cluster()
+
+            # wait until all replicas inited by write_replica()
+            falcon_cm.wait_until_replicas_nodes_ready()
+            # leader should watch_replicas_and_update_cn_table, no need to flush, init_filesystem will flush leader and followers
+            falcon_cm.watch_replicas_and_update_cn_table(False)
             try:
                 falcon_cm.init_filesystem()
             except Exception as e:

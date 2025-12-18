@@ -162,21 +162,23 @@ class FalconCM:
         )
         if self._zk_client.exists(self._root_path + "/ready"):
             # restart
-            leader_select_restart(node_info, leader_path, last_leader_path)
+            self.leader_select_restart(node_info, leader_path, last_leader_path)
         else:
             # first run, init
-            leader_select_init(node_info, leader_path)
+            self.leader_select_init(node_info, leader_path, last_leader_path)
         return self._is_leader
 
     # The first to create /leader becomes the leader
-    def leader_select_init(self, node_info, leader_path):
+    def leader_select_init(self, node_info, leader_path, last_leader_path):
         if self._zk_client.exists(leader_path):
+            self.logger.info(f"Exists{leader_path}")
             self._is_leader = False
         else:
             try:
                 self._zk_client.create(
                     leader_path, value=str.encode(node_info), ephemeral=True
                 )
+                self.logger.info(f"Create leader {leader_path}")
                 self._cluster_leader_ip = self._pod_ip
                 self._is_leader = True
                 if self._is_cn:
@@ -185,6 +187,7 @@ class FalconCM:
                     last_leader_path, value=str.encode(self._host_node_name)
                 )
             except NodeExistsError:
+                self.logger.info(f"Leader exists")
                 self._is_leader = False
             except Exception as e:
                 self.logger.error(
@@ -217,6 +220,7 @@ class FalconCM:
     def write_replica(self):
         """write the replica for the node"""
         if self._is_cn:
+            self.logger.info("write_replica: is cn")
             found = False
             while not found:
                 host_node_path = "{}/{}/hostNodes".format(
@@ -684,9 +688,9 @@ class FalconCM:
         while True:
             try:
                 replicas_list = self._zk_client.get_children(replica_path)
-                if len(replica_path) == self._replica_server_num:
+                if len(replicas_list) == self._replica_server_num:
                     break
-                self.logger.error(f"Replicas {replica_path} size: {len(replica_path)} < replica_server_num. Waiting...")
+                self.logger.error(f"Replicas {replica_path} size: {len(replicas_list)} < replica_server_num. Waiting...")
             except Exception as ex:
                 self.logger.error(f"Failed to monitor path {replica_path}: {ex}")
             time.sleep(1)
@@ -773,7 +777,7 @@ class FalconCM:
                     )
                     data = self._zk_client.get(cluster_leader_path)
                     leader_infos[cluster_name] = bytes.decode(data[0])
-                    follower_infos[cluster_name] = [bytes.decode(replica_node) for replica_node in replica_nodes]
+                    follower_infos[cluster_name] = [replica_node for replica_node in replica_nodes]
             time.sleep(1)
         # leader_infos and follower_infos have the same size
         assert (len(leader_infos) == len(follower_infos))
@@ -1022,7 +1026,7 @@ class FalconCM:
                 self._meta_port,            # cn database port
                 self._user_name,            # cn database user
                 added,
-                removed
+                removed,
                 self._cluster_id,           # group id
             )
             postgresql.reload_foreign_server_cache(
@@ -1044,25 +1048,25 @@ class FalconCM:
         def watch_nodes(children):
             self.logger.info(f'{self._cluster_name} in watch replicas')
 
-            # For first non flush cn table call, only set the local replicas list
             if first_call_status[0] == 0:
+                # For first non flush cn table call, only set the local replicas list
                 self._cached_cluster_info = children
-                skip_first[0] = 2
+                first_call_status[0] = 2
                 return
-            # For first flush cn table call, replace cn table with new replicas list
             elif first_call_status[0] == 1:
+                # For first flush cn table call, replace cn table with new replicas list
                 self._cached_cluster_info = children
                 # replace means delete all old and write all new in one transaction
                 self.update_cn_node_table_replicas(["*"], children)
-                skip_first[0] = 2
+                first_call_status[0] = 2
                 return
 
             # For later replicas update, apply the diff
             old_children = set(self._cached_cluster_info)
             new_children = set(children)
 
-            added = new_children - old_children
-            removed = old_children - new_children
+            added = list(new_children - old_children)
+            removed = list(old_children - new_children)
 
             if added:
                 self.logger.info(f"added: {added}")
@@ -1073,7 +1077,7 @@ class FalconCM:
                 self.update_cn_node_table_replicas(removed, added)
 
             self._cached_cluster_info = children
-            print(f"{self._cluster_name}_info: {children}")
+            self.logger.info(f"{self._cluster_name}_info: {children}")
 
             self._watch_replica_lock.acquire()
             self._replica_change_num += 1

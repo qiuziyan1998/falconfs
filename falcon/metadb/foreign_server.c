@@ -23,6 +23,8 @@
 #include "utils/snapmgr.h"
 #include "utils/wait_event.h"
 #include "utils/lsyscache.h"
+#include "postgres.h"
+#include "miscadmin.h"
 
 #include "control/control_flag.h"
 #include "utils/error_log.h"
@@ -548,7 +550,7 @@ static void RenewForeignServerLocalCache(const bool needLock)
     if (LocalServerId == -1) {
         hash_seq_init(&status, ForeignServerShmemCache);
         while ((foreignServerInfo = hash_seq_search(&status)) != NULL) {
-            if (foreignServerInfo->is_local) {
+            if (foreignServerInfo->is_local && foreignServerInfo->is_leader) {
                 LocalServerId = foreignServerInfo->server_id;
                 strcpy(LocalServerName, foreignServerInfo->server_name);
                 hash_seq_term(&status);
@@ -860,7 +862,7 @@ List *GetAllForeignServerId_Group(bool exceptSelf, bool exceptCn)
     HTAB *groupHash = NULL;
     HASHCTL hashCtl;
     memset(&hashCtl, 0, sizeof(hashCtl));
-    hashCtl.keysize = sizeof(int); // group_id作为键
+    hashCtl.keysize = sizeof(int); // group_id
     hashCtl.entrysize = sizeof(GroupServerEntry);
     hashCtl.hcxt = CurrentMemoryContext;
     groupHash = hash_create("ForeignServer Group Hash", 
@@ -868,20 +870,23 @@ List *GetAllForeignServerId_Group(bool exceptSelf, bool exceptCn)
 
     List *result = NIL;
     HASH_SEQ_STATUS status;
-    FormData_falcon_foreign_server *foreignServerInfo;
     hash_seq_init(&status, ForeignServerShmemCache);
+    FormData_falcon_foreign_server *foreignServerInfo;
     while ((foreignServerInfo = hash_seq_search(&status)) != NULL) {
         if (exceptSelf && foreignServerInfo->is_local)
             continue;
         if (exceptCn && foreignServerInfo->group_id == 0) // we assume 0 to be cn
             continue;
         // save (group_id, server_id[]) in the groupHash
+        int group_id = foreignServerInfo->group_id;
         bool found = false;
+
         GroupServerEntry *entry = (GroupServerEntry *)hash_search(groupHash, 
-                                                                  &foreignServerInfo->group_id,
-                                                                  HASH_ENTER, &found);
+                                                                  &group_id,
+                                                                  HASH_ENTER,
+                                                                  &found);
         if (!found) {
-            // init
+            entry->group_id = group_id;
             entry->server_list = NIL;
         }
         if (foreignServerInfo->is_leader) {
@@ -894,7 +899,7 @@ List *GetAllForeignServerId_Group(bool exceptSelf, bool exceptCn)
             entry->server_list = lappend_int(entry->server_list, -1);
         }
     }
-    
+
     HASH_SEQ_STATUS hashStatus;
     GroupServerEntry *groupEntry;
     hash_seq_init(&hashStatus, groupHash);

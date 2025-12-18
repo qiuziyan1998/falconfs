@@ -104,6 +104,7 @@ typedef enum FalconForeignServerTableScankeyType {
 } FalconForeignServerTableScankeyType;
 
 typedef struct {
+    int32_t group_id;
     List *server_list;
 } GroupServerEntry;
 
