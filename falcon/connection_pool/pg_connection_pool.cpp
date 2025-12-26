@@ -20,7 +20,7 @@ void PGConnectionPool::BackgroundPoolManager()
         while (withTasks) {
             int emptyCount = 0;
             for (int i = 0; i <= TaskSupportBatchType::NOT_SUPPORT; ++i) {
-                int queueSizeApprox = supportBatchTaskList[i].task->jobList.size_approx();
+                int queueSizeApprox = supportBatchTaskList[i].task->jobList.size();
                 if (queueSizeApprox == 0) {
                     emptyCount++;
                     continue;
@@ -60,10 +60,22 @@ int PGConnectionPool::BatchDequeueExec(int toDequeue, int queueIndex)
     auto taskVecPtr = std::make_shared<WorkerTask>();
     taskVecPtr->isBatch = true;
     taskVecPtr->jobList.reserve(toDequeue);
-    int count = supportBatchTaskList[queueIndex].task->jobList.try_dequeue_bulk(
-        std::back_inserter(taskVecPtr->jobList), 
-        toDequeue
-    );
+    size_t count = 0;
+    // std::function func = [&taskVecPtr](falcon::meta_proto::AsyncMetaServiceJob *job) {
+    //     taskVecPtr->jobList.emplace_back(job);
+    // };
+    for (int i = 0; i < toDequeue; i++) {
+        if (!supportBatchTaskList[queueIndex].task->jobList.dequeue_one([&taskVecPtr](falcon::meta_proto::AsyncMetaServiceJob *job) {
+            taskVecPtr->jobList.emplace_back(job);
+        })) {
+            break;
+        }
+        ++count;
+    }
+    // size_t count = supportBatchTaskList[queueIndex].task->jobList.try_dequeue_bulk(
+    //     std::back_inserter(taskVecPtr->jobList), 
+    //     toDequeue
+    // );
     if (count == 0) {
         return 0;
     }
@@ -75,10 +87,22 @@ int PGConnectionPool::BatchDequeueExec(int toDequeue, int queueIndex)
 int PGConnectionPool::SingleDequeueExec(int toDequeue, std::vector<falcon::meta_proto::AsyncMetaServiceJob *> &tasksContainer)
 {
     tasksContainer.clear();
-    size_t count = supportBatchTaskList[TaskSupportBatchType::NOT_SUPPORT].task->jobList.try_dequeue_bulk(
-        std::back_inserter(tasksContainer), 
-        toDequeue
-    );
+    size_t count = 0;
+    // std::function func = [&tasksContainer](falcon::meta_proto::AsyncMetaServiceJob *job) {
+    //     tasksContainer.emplace_back(job);
+    // };
+    for (int i = 0; i < toDequeue; i++) {
+        if (!supportBatchTaskList[TaskSupportBatchType::NOT_SUPPORT].task->jobList.dequeue_one([&tasksContainer](falcon::meta_proto::AsyncMetaServiceJob *job) {
+            tasksContainer.emplace_back(job);
+        })) {
+            break;
+        }
+        ++count;
+    }
+    // size_t count = supportBatchTaskList[TaskSupportBatchType::NOT_SUPPORT].task->jobList.try_dequeue_bulk(
+    //     std::back_inserter(tasksContainer), 
+    //     toDequeue
+    // );
     if (count == 0) {
         return 0;
     }
@@ -159,12 +183,12 @@ void PGConnectionPool::DispatchAsyncMetaServiceJob(falcon::meta_proto::AsyncMeta
     }
 
     if (allowBatchWithOthers) {
-        while (!supportBatchTaskList[taskSupportBatchType].task->jobList.enqueue(job)) {
+        while (!supportBatchTaskList[taskSupportBatchType].task->jobList.push(job)) {
             std::cout << "DispatchAsyncMetaServiceJob: enqueue failed, type = " << taskSupportBatchType << std::endl;
             std::this_thread::yield();
         }
     } else {
-        while (!supportBatchTaskList[TaskSupportBatchType::NOT_SUPPORT].task->jobList.enqueue(job)) {
+        while (!supportBatchTaskList[TaskSupportBatchType::NOT_SUPPORT].task->jobList.push(job)) {
             std::cout << "DispatchAsyncMetaServiceJob: enqueue failed, type = " << taskSupportBatchType << std::endl;
             std::this_thread::yield();
         }

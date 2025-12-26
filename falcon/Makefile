@@ -46,7 +46,7 @@ PGFILEDESC = "falcon"
 
 LDFLAGS_PROTO = -Wl,-Bdynamic -lprotobuf
 LDFLAGS_BRPC = -lbrpc
-LDFLAGS_DEPENDENCIES = -L../../../../falcon/third_party/glog/lib -lpthread -lgflags -lleveldb -lcrypto -lssl -ldl -lz -lglog
+LDFLAGS_DEPENDENCIES = -L../../../../falcon/third_party/glog/lib -lpthread -lgflags -lleveldb -lcrypto -lssl -ldl -lz -lglog -lboost_system -lboost_thread
 
 PG_CPPFLAGS = -I$(libpq_srcdir) -I./include -I./connection_pool/proto -I./connection_pool/fbs \
 			  -I$(REMOTE_CONNECTION_DEF_DIR) \

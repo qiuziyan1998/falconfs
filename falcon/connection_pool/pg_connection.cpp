@@ -43,7 +43,7 @@ void PGConnection::BackgroundWorker()
     while (working) {
         if (!working)
             break;
-        this->tasksToExec.wait_dequeue(taskToExec);
+        this->tasksToExec.pull(taskToExec);
 
         // 1. Reset status and check validity of input
         PGresult *res;
@@ -338,10 +338,11 @@ void PGConnection::BackgroundWorker()
 
 void PGConnection::Exec(std::shared_ptr<WorkerTask> taskToExec)
 {
-    while (!this->tasksToExec.enqueue(taskToExec)) {
-        std::cout << "PGConnection::Exec: enqueue failed" << std::endl;
-        std::this_thread::yield();
-    }
+    // while (!this->tasksToExec.push(taskToExec)) {
+    //     std::cout << "PGConnection::Exec: enqueue failed" << std::endl;
+    //     std::this_thread::yield();
+    // }
+    this->tasksToExec.push(taskToExec);
 }
 
 void PGConnection::Stop()
