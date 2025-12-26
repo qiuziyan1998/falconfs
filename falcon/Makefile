@@ -42,7 +42,7 @@ PG_CPPFLAGS = -Wno-deprecated-declarations -I$(libpq_srcdir) -I./include -I./con
 			  -I$(falcon_srcdir)/../falcon/third_party/glog/include \
 			  -I$(falcon_srcdir)/../third_party
 SHLIB_LINK_INTERNAL =  -L../../src/interfaces/libpq -Wl,--no-as-needed -lpq -lstdc++ \
-					-lz -Wl,--as-needed
+					-lz -Wl,--as-needed -lboost_system -lboost_thread
 ifneq ($(strip $(FALCONFS_INSTALL_DIR)),)
 SHLIB_LINK_INTERNAL += -L$(FALCONFS_INSTALL_DIR)/lib -L$(FALCONFS_INSTALL_DIR)/lib64
 endif
