@@ -27,6 +27,7 @@ struct ServerIdentifier
     std::string ip;
     int port;
     int id;
+    bool isPrimary = false;
     ServerIdentifier() = default;
 
     ServerIdentifier(std::string_view ip, int port)

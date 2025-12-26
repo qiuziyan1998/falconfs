@@ -57,6 +57,8 @@ class Router {
 
     int GetAllWorkerConnection(std::unordered_map<std::string, std::shared_ptr<Connection>> &workerInfo);
 
+    int GetAllWorkerConnection_Primary(std::unordered_map<std::string, std::shared_ptr<Connection>> &workerInfo);
+
     std::shared_ptr<Connection> TryToUpdateCNConn(std::shared_ptr<Connection> conn);
 
     std::shared_ptr<Connection> TryToUpdateWorkerConn(std::shared_ptr<Connection> conn);

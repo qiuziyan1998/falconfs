@@ -140,6 +140,7 @@ int FalconGetStat(const std::string &path, struct stat *stbuf)
     int errorCode = SERVER_FAULT;
     std::shared_ptr<Connection> conn;
 
+    uint64_t primaryLsn = 0;
     if (readMetaStandby) {
         std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
         if (conns.size() != 2) {
@@ -147,7 +148,7 @@ int FalconGetStat(const std::string &path, struct stat *stbuf)
             return PROGRAM_ERROR;
         }
         conn = conns[1];
-        uint64_t primaryLsn = UINT64_MAX;
+        primaryLsn = UINT64_MAX;
         if (conns[0]->cachedPrimaryLsn->get(primaryLsn)) {
             errorCode = conns[0]->Stat(path.c_str(), primaryLsn, stbuf);
         }
@@ -187,6 +188,7 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
     int errorCode = SERVER_FAULT;
     std::shared_ptr<Connection> conn;
 
+    uint64_t primaryLsn = 0;
     if (readMetaStandby) {
         std::cout << "FalconOpen: readMetaStandby" << std::endl;
         std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
@@ -196,7 +198,7 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
         }
         conn = conns[1];
 
-        uint64_t primaryLsn = UINT64_MAX;
+        primaryLsn = UINT64_MAX;
         if (conns[0]->cachedPrimaryLsn->get(primaryLsn)) {
             errorCode = conns[0]->Open(path.c_str(), primaryLsn, inodeId, size, nodeId, stbuf);
         }
@@ -379,7 +381,7 @@ int FalconReadDir(const std::string &path, void *buf, FalconFuseFiller filler, o
     if (offset == 0) {
         /* offset == 0 means that the readdir function is the first called, we should prepare the connection to all dn
          */
-        ret = router->GetAllWorkerConnection(workerInfo);
+        ret = router->GetAllWorkerConnection_Primary(workerInfo);
 
         if (ret != SUCCESS) {
             FALCON_LOG(LOG_ERROR) << "FalconReadDir failed for path: " << path << ", GET_ALL_WORKER_CONN_FAILED";

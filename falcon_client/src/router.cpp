@@ -36,6 +36,11 @@ std::vector<ServerIdentifier> Router::FetchServerFromRow(int row, int col, const
                                 StringToInt32(response->data()->Get(row * col + 2 + serverNumber + i)->c_str()) + 10,
                                 StringToInt32(response->data()->Get(row * col + 2 + serverNumber * 2 + i)->c_str()));
     }
+    if (serverList.empty()) {
+        FALCON_LOG(LOG_WARNING) << "FetchServerFromRow: no valid dn server, even leader";
+    } else {
+        serverList[0].isPrimary = true;
+    }
     return serverList;
 }
 
@@ -76,12 +81,21 @@ int Router::FetchShardTable(std::shared_ptr<Connection> conn)
         std::shared_ptr<ExpiringCache<uint64_t>> primaryLsn = \
             std::make_shared<ExpiringCache<uint64_t>>(std::chrono::milliseconds(primaryLsnTtlMs));
         for (auto &server : serverList) {
+            std::shared_ptr<Connection> toBeInserted = nullptr;
             if (!oldRouteMap.empty() && oldRouteMap.contains(server)) {
-                routeMap.try_emplace(server, oldRouteMap[server]);
+                // connection kept alive by rpc framework
+                toBeInserted = oldRouteMap[server];
             } else {
-                routeMap.try_emplace(server, std::make_shared<Connection>(server));
+                toBeInserted = std::make_shared<Connection>(server);
+                if (toBeInserted == nullptr) {
+                    FALCON_LOG(LOG_WARNING) << "FetchShardTable: unable to initiate connection to " \
+                                            << server.ip << ":" << server.port;
+                }                
             }
-            routeMap[server]->cachedPrimaryLsn = primaryLsn;
+            if (toBeInserted) {
+                toBeInserted->cachedPrimaryLsn = primaryLsn;
+                routeMap.try_emplace(server, toBeInserted);
+            }
         }
         lastShardMaxValue = shardMaxValue;
     }
@@ -182,6 +196,17 @@ int Router::GetAllWorkerConnection(std::unordered_map<std::string, std::shared_p
     std::shared_lock<std::shared_mutex> lock(mapMtx);
     for (const auto &[server, conn] : routeMap) {
         workerInfo.emplace(std::format("{}:{}", server.ip, server.port), conn);
+    }
+    return 0;
+}
+
+int Router::GetAllWorkerConnection_Primary(std::unordered_map<std::string, std::shared_ptr<Connection>> &workerInfo)
+{
+    std::shared_lock<std::shared_mutex> lock(mapMtx);
+    for (const auto &[server, conn] : routeMap) {
+        if (server.isPrimary) {
+            workerInfo.emplace(std::format("{}:{}", server.ip, server.port), conn);
+        }
     }
     return 0;
 }
