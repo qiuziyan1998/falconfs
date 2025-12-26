@@ -19,6 +19,7 @@
 #include "connection_pool/falcon_batch_service_def.h"
 #include "connection_pool/falcon_worker_task.h"
 #include "connection_pool/pg_connection.h"
+#include "connection_pool/queue.hpp"
 
 class PGConnectionPool {
   private:
@@ -37,7 +38,7 @@ class PGConnectionPool {
 
     class TaskSupportBatch {
       public:
-        moodycamel::ConcurrentQueue<BaseMetaServiceJob *> jobList;
+        fast_queue::SingleConsumerQueue<BaseMetaServiceJob *> jobList;
         std::mutex taskMutex;
         std::condition_variable cvBatchNotFull;
     };
@@ -87,6 +88,10 @@ class PGConnectionPool {
 
 void PGConnectionPool::BackgroundPoolManager()
 {
+    for (int i = 0; i <= (int)FalconBatchServiceType::NOT_SUPPORT; ++i) {
+        supportBatchTaskList[i].jobList.setConsumer(std::this_thread::get_id());
+    }
+
     int waitTime = 100; // microseconds
     while (working) {
         if (!working)
@@ -136,7 +141,13 @@ int PGConnectionPool::BatchDequeueExec(int toDequeue, int queueIndex)
 {
     std::vector<BaseMetaServiceJob *> jobList;
     jobList.reserve(toDequeue);
-    int count = supportBatchTaskList[queueIndex].jobList.try_dequeue_bulk(std::back_inserter(jobList), toDequeue);
+    std::function func = [&jobList](BaseMetaServiceJob *job) {
+        jobList.emplace_back(job);
+    };
+    size_t count = supportBatchTaskList[queueIndex].jobList.dequeue_bulk(
+        std::move(func),
+        toDequeue
+    );
     if (count == 0) {
         return 0;
     }
@@ -154,9 +165,13 @@ int PGConnectionPool::SingleDequeueExec(int toDequeue)
 {
     std::vector<BaseMetaServiceJob *> singleJobList;
     singleJobList.reserve(toDequeue);
-    size_t count = supportBatchTaskList[(int)FalconBatchServiceType::NOT_SUPPORT].jobList.try_dequeue_bulk(
-        std::back_inserter(singleJobList),
-        toDequeue);
+    std::function func = [&singleJobList](BaseMetaServiceJob *job) {
+        singleJobList.emplace_back(job);
+    };
+    size_t count = supportBatchTaskList[(int)FalconBatchServiceType::NOT_SUPPORT].jobList.dequeue_bulk(
+        std::move(func),
+        toDequeue
+    );
     if (count == 0) {
         return 0;
     }
