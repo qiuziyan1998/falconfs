@@ -17,6 +17,7 @@ CLIENT_NUM=10
 THREAD_NUM_PER_CLIENT=12
 META_SERVER_IP=""
 META_SERVER_PORT=""
+READ_META_STANDBY=1
 ROUND_NAME=("workload_init" "workload_create" "workload_stat" "workload_open" "workload_close" "workload_delete" "workload_mkdir" "workload_rmdir" "workload_open_write_close" "workload_open_write_close_nocreate" "workload_open_read_close" "workload_uninit")
 
 
@@ -25,7 +26,7 @@ do
     for ((i=0; i<${#ALL_SERVERS[@]}; i++))
     do
         SERVER=${ALL_SERVERS[$i]}
-        ssh $SERVER "SERVER_IP=$META_SERVER_IP SERVER_PORT=$META_SERVER_PORT LD_LIBRARY_PATH=/usr/local/lib64/:$LD_LIBRARY_PATH $BIN_DIR/$TEST_PROGRAM $MOUNT_DIR $FILE_PER_THREAD $THREAD_NUM $round_idx $i 1 16384 $PORT $FILE_SIZE $CLIENT_NUM &> $BIN_DIR/result_1111 &"
+        ssh $SERVER "SERVER_IP=$META_SERVER_IP SERVER_PORT=$META_SERVER_PORT READ_STANDBY=$READ_META_STANDBY LD_LIBRARY_PATH=/usr/local/lib64/:$LD_LIBRARY_PATH $BIN_DIR/$TEST_PROGRAM $MOUNT_DIR $FILE_PER_THREAD $THREAD_NUM $round_idx $i 1 16384 $PORT $FILE_SIZE $CLIENT_NUM &> $BIN_DIR/result_1111 &"
     done
 
     sleep 1

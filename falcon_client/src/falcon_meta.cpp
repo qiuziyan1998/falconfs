@@ -190,7 +190,6 @@ int FalconOpen(const std::string &path, int oflags, uint64_t &fd, struct stat *s
 
     uint64_t primaryLsn = 0;
     if (readMetaStandby) {
-        std::cout << "FalconOpen: readMetaStandby" << std::endl;
         std::vector<std::shared_ptr<Connection>> conns = router->GetWorkerConnByPath_Backup(path);
         if (conns.size() != 2) {
             FALCON_LOG(LOG_ERROR) << "FalconOpen: route error, no backup conn";
