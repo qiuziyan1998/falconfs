@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 SCRIPT_DIR="$(readlink -f "$(dirname "${BASH_SOURCE[0]:-${(%):-%x}}")")"
-PG_INSTALL_DIR=~/metadb
+export PG_INSTALL_DIR="${PG_INSTALL_DIR:-$HOME/metadb}"
 
 export FALCONFS_HOME="${SCRIPT_DIR}/.."
 echo "Setting FALCONFS_HOME to ${FALCONFS_HOME} and updating PATH/LD_LIBRARY_PATH/PYTHONPATH"

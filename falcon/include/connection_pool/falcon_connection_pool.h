@@ -9,10 +9,8 @@
 #include "utils/falcon_shmem_allocator.h"
 
 void FalconDaemonConnectionPoolProcessMain(unsigned long int main_arg);
-
-extern FalconShmemAllocator FalconConnectionPoolShmemAllocator;
-
 size_t FalconConnectionPoolShmemsize(void);
 void FalconConnectionPoolShmemInit(void);
+void RunConnectionPoolServer(void);
 
 #endif

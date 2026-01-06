@@ -19,7 +19,10 @@ function uninstall_cluster() {
     # unmount fuse filesystem before reinstall
     for ((idx = 1; idx <= FALCON_STORE_NUM; idx++)); do
         # do umount
-        sudo umount -l "${FALCON_DATA_PATH}"/falcon-data/store-"${idx}"/data 2>/dev/null || true
+        mount_flag=$(mount -t fuse.falcon_client | awk "/store-${idx}/" | wc -l)
+        if [ "${mount_flag}" -eq "1" ]; then
+            sudo umount -l "${FALCON_DATA_PATH}"/falcon-data/store-"${idx}"/data
+        fi
     done
     # Stop and remove pre containers resources
     docker-compose -f "${1}" down
