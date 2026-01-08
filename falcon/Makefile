@@ -12,7 +12,7 @@ OBJS += \
 	$(patsubst $(falcon_srcdir)/%.c,%.o,$(foreach dir,$(SUBDIRS), $(sort $(wildcard $(falcon_srcdir)/$(dir)/*.c))))
 OBJS += $(CXX_OBJS)
 
-REMOTE_CONNECTION_DEF_DIR = $(falcon_srcdir)/../../../../remote_connection_def
+REMOTE_CONNECTION_DEF_DIR = $(falcon_srcdir)/../remote_connection_def
 CONNECTION_POOL_DIR = $(falcon_srcdir)/connection_pool
 
 FBS_DIR = $(shell find $(REMOTE_CONNECTION_DEF_DIR) -type d | grep -E '/fbs$$')
@@ -33,13 +33,20 @@ $(FBS_HEAD): $(FBS_FILE)
 
 PGFILEDESC = "falcon"
 
-PG_CPPFLAGS = -I$(libpq_srcdir) -I./include -I./brpc_comm_adapter/proto -I./connection_pool/fbs \
+LDFLAGS_PROTO = -Wl,-Bdynamic -lprotobuf
+LDFLAGS_DEPENDENCIES = -L../../../../falcon/third_party/glog/lib -lpthread -lgflags -lleveldb -lcrypto -lssl -ldl -lz -lglog
+
+PG_CPPFLAGS = -Wno-deprecated-declarations -I$(libpq_srcdir) -I./include -I./connection_pool/proto -I./connection_pool/fbs \
 			  -I$(REMOTE_CONNECTION_DEF_DIR) \
 			  -I/usr/local/include \
-			  -I$(falcon_srcdir)/../../../../falcon/third_party/glog/include \
-			  -I$(falcon_srcdir)/../../../../third_party
+			  -I$(falcon_srcdir)/../falcon/third_party/glog/include \
+			  -I$(falcon_srcdir)/../third_party
 SHLIB_LINK_INTERNAL =  -L../../src/interfaces/libpq -Wl,--no-as-needed -lpq -lstdc++ \
-					-lz -Wl,--as-needed -lpthread -ldl
+					-lz -Wl,--as-needed
+ifneq ($(strip $(FALCONFS_INSTALL_DIR)),)
+SHLIB_LINK_INTERNAL += -L$(FALCONFS_INSTALL_DIR)/lib -L$(FALCONFS_INSTALL_DIR)/lib64
+endif
+SHLIB_LINK_INTERNAL += $(LDFLAGS_PROTO) $(LDFLAGS_DEPENDENCIES)
 
 EXTENSION = falcon
 DATA = falcon--1.0.sql

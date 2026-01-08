@@ -6,6 +6,8 @@
 
 #include "fmgr.h"
 #include "utils/palloc.h"
+#include "varatt.h"
+
 #include <unistd.h>
 #include "metadb/meta_serialize_interface_helper.h"
 #include "utils/error_log.h"

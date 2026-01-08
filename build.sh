@@ -8,6 +8,12 @@ WITH_FUSE_OPT=false
 WITH_ZK_INIT=false
 WITH_RDMA=false
 WITH_PROMETHEUS=false
+CREATE_SOFT_LINK=true
+
+FALCONFS_INSTALL_DIR="${FALCONFS_INSTALL_DIR:-/usr/local/falconfs}"
+export FALCONFS_INSTALL_DIR=$FALCONFS_INSTALL_DIR
+export PATH=$FALCONFS_INSTALL_DIR/bin:$FALCONFS_INSTALL_DIR/python/bin:${PATH:-}
+export LD_LIBRARY_PATH=$FALCONFS_INSTALL_DIR/lib64:$FALCONFS_INSTALL_DIR/lib:$FALCONFS_INSTALL_DIR/python/lib:${LD_LIBRARY_PATH:-}
 
 # Default command is build
 COMMAND=${1:-build}
@@ -20,8 +26,10 @@ export CONFIG_FILE="$FALCONFS_DIR/config/config.json"
 # Set build directory
 BUILD_DIR="${BUILD_DIR:-$FALCONFS_DIR/build}"
 
-# Set default PostgreSQL install directory
-export PG_INSTALL_DIR="${PG_INSTALL_DIR:-$HOME/metadb}"
+# Set default install directory
+PG_INSTALL_DIR="$FALCONFS_INSTALL_DIR/falcon_metadb"
+FALCON_CLIENT_INSTALL_DIR="$FALCONFS_INSTALL_DIR/falcon_client"
+PYTHON_SDK_INSTALL_DIR="$FALCONFS_INSTALL_DIR/falcon_python_interface"
 
 gen_proto() {
     mkdir -p "$BUILD_DIR"
@@ -35,15 +43,15 @@ gen_proto() {
 build_pg() {
     local BLD_OPT=${1:-"deploy"}
     [[ "$BUILD_TYPE" == "Debug" ]] && BLD_OPT="debug"
-    local CONFIGURE_OPTS=()
+    local CONFIGURE_OPTS=(--without-icu)
+    local PG_CFLAGS=""
 
     echo "Building PostgreSQL (mode: $BLD_OPT) ..."
-    rm -rf "$POSTGRES_SRC_DIR/contrib/falcon"
-    cp -rf "$FALCONFS_DIR/falcon" "$POSTGRES_SRC_DIR/contrib/falcon"
 
     # set build options
     if [[ "$BLD_OPT" == "debug" ]]; then
         CONFIGURE_OPTS+=(--enable-debug)
+        PG_CFLAGS="-ggdb -O0 -g3 -Wall -fno-omit-frame-pointer"
     fi
 
     # enter source directory
@@ -54,17 +62,12 @@ build_pg() {
         make distclean || true
     fi
 
-    # generate Configure and build PostgreSQL
-    ./configure --prefix=${PG_INSTALL_DIR} "${CONFIGURE_OPTS[@]}" &&
+    # 生成配置并构建
+    CFLAGS="$PG_CFLAGS" ./configure --prefix=${PG_INSTALL_DIR} "${CONFIGURE_OPTS[@]}" \
+        --enable-rpath LDFLAGS="-Wl,-rpath,$FALCONFS_INSTALL_DIR/lib64:$FALCONFS_INSTALL_DIR/lib" &&
         make -j$(nproc) &&
         cd "$POSTGRES_SRC_DIR/contrib" && make -j
     echo "PostgreSQL build complete."
-
-    # build brpc communication plugin.
-    # later when HCom plugin is provided, need to modify here to choose different communication plugins through configuration
-    echo "Building brpc communication plugin..."
-    cd "$POSTGRES_SRC_DIR/contrib/falcon" && make -f MakefilePlugin.brpc
-    echo "build brpc communication plugin complete."
 }
 
 clean_pg() {
@@ -72,7 +75,6 @@ clean_pg() {
     if [[ -d "$POSTGRES_SRC_DIR/contrib/falcon" ]]; then
         cd "$POSTGRES_SRC_DIR" &&
             [ -f "Makefile" ] && make clean || true
-        rm -rf "$POSTGRES_SRC_DIR/contrib/falcon"
     fi
     echo "PostgreSQL clean complete."
 }
@@ -80,8 +82,19 @@ clean_pg() {
 # build_falconfs
 build_falconfs() {
     gen_proto
-    echo "Building FalconFS (mode: $BUILD_TYPE)..."
+
+    PG_CFLAGS=""
+    if [[ "$BUILD_TYPE" == "Debug" ]]; then
+        CONFIGURE_OPTS+=(--enable-debug)
+        PG_CFLAGS="-ggdb -O0 -g3 -Wall -fno-omit-frame-pointer"
+    fi
+    echo "Building FalconFS Meta (mode: $BUILD_TYPE)..."
+    cd $FALCONFS_DIR/falcon
+    make USE_PGXS=1 CFLAGS="-Wno-shadow $PG_CFLAGS" CXXFLAGS="-Wno-shadow $PG_CFLAGS"
+
+    echo "Building FalconFS Client (mode: $BUILD_TYPE)..."
     cmake -B "$BUILD_DIR" -GNinja "$FALCONFS_DIR" \
+        -DCMAKE_INSTALL_PREFIX=$FALCON_CLIENT_INSTALL_DIR \
         -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
         -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
         -DPOSTGRES_SRC_DIR="$POSTGRES_SRC_DIR" \
@@ -91,12 +104,26 @@ build_falconfs() {
         -DWITH_PROMETHEUS="$WITH_PROMETHEUS" \
         -DBUILD_TEST=$BUILD_TEST &&
         cd "$BUILD_DIR" && ninja
+
+    # build brpc communication plugin.
+    # later when HCom plugin is provided, need to modify here to choose different communication plugins through configuration
+    echo "Building brpc communication plugin..."
+    cd "$FALCONFS_DIR/falcon" && make -f MakefilePlugin.brpc
+    echo "build brpc communication plugin complete."
+
     echo "FalconFS build complete."
 }
 
 # clean_falconfs
 clean_falconfs() {
-    echo "Cleaning FalconFS..."
+    echo "Cleaning FalconFS Meta"
+    cd $FALCONFS_DIR/falcon
+    make USE_PGXS=1 clean
+    rm -rf $FALCONFS_DIR/falcon/connection_pool/fbs
+    rm -rf $FALCONFS_DIR/falcon/brpc_comm_adapter/proto
+    make -f MakefilePlugin.brpc clean
+
+    echo "Cleaning FalconFS Client..."
     rm -rf "$BUILD_DIR"
     echo "FalconFS clean complete."
 }
@@ -112,13 +139,48 @@ install_pg() {
     cd "$POSTGRES_SRC_DIR" &&
         make install
     cd "$POSTGRES_SRC_DIR/contrib" && make install
+    if [[ "$CREATE_SOFT_LINK" == "true" ]]; then
+        bash $FALCONFS_DIR/deploy/ansible/link_third_party_to.sh $PG_INSTALL_DIR $FALCONFS_INSTALL_DIR
+    fi
     echo "PostgreSQL installed to $PG_INSTALL_DIR"
+}
+
+install_falcon_meta() {
+    echo "Installing FalconFS meta ..."
+    cd "$FALCONFS_DIR/falcon" && make USE_PGXS=1 install
+    echo "FalconFS meta installed"
 
     # install brpc communication plugin.
     # later when HCom plugin is provided, need to modify here to choose different communication plugins through configuration
     echo "copy brpc communication plugin to $PG_INSTALL_DIR/lib/postgresql..."
-    cp "$POSTGRES_SRC_DIR/contrib/falcon/libbrpcplugin.so" "$PG_INSTALL_DIR/lib/postgresql/"
+    cp "$FALCONFS_DIR/falcon/libbrpcplugin.so" "$PG_INSTALL_DIR/lib/postgresql/"
     echo "brpc communication plugin copied."
+}
+
+install_falcon_client() {
+    echo "Installing FalconFS client to $FALCON_CLIENT_INSTALL_DIR..."
+    cd "$BUILD_DIR" && ninja install
+    if [[ "$CREATE_SOFT_LINK" == "true" ]]; then
+        bash $FALCONFS_DIR/deploy/ansible/link_third_party_to.sh $FALCON_CLIENT_INSTALL_DIR $FALCONFS_INSTALL_DIR
+    fi
+
+    echo "FalconFS client installed to $FALCON_CLIENT_INSTALL_DIR"
+}
+
+install_falcon_python_sdk() {
+    echo "Installing FalconFS python sdk to $PYTHON_SDK_INSTALL_DIR..."
+    rm -rf "$PYTHON_SDK_INSTALL_DIR"
+    cp -r "$FALCONFS_DIR/python_interface" "$PYTHON_SDK_INSTALL_DIR"
+    echo "FalconFS python sdk installed to $PYTHON_SDK_INSTALL_DIR"
+}
+
+install_deploy_scripts() {
+    echo "Installing deploy scripts to $FALCONFS_INSTALL_DIR..."
+    rm -rf "$FALCONFS_INSTALL_DIR/deploy"
+    rm -rf "$FALCONFS_INSTALL_DIR/config"
+    rsync -av --exclude='tmp' "$FALCONFS_DIR/deploy" "$FALCONFS_INSTALL_DIR"
+    rsync -av --exclude='tmp' "$FALCONFS_DIR/config" "$FALCONFS_INSTALL_DIR"
+    echo "deploy scripts installed to $FALCONFS_INSTALL_DIR"
 }
 
 clean_dist() {
@@ -350,7 +412,23 @@ test)
     echo "All unit tests passed."
     ;;
 install)
-    install_pg
+    case "${2:-}" in
+    pg)
+        install_pg
+        ;;
+    falcon)
+        install_falcon_meta
+        install_falcon_client
+        install_falcon_python_sdk
+        install_deploy_scripts
+        ;;
+    *)
+        install_pg
+        install_falcon_meta
+        install_falcon_client
+        install_falcon_python_sdk
+        install_deploy_scripts
+    esac
     ;;
 *)
     print_help "build"

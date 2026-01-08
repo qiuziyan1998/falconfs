@@ -7,7 +7,7 @@ BRPC_PLUGIN_CXX_OBJS += \
 BRPC_PLUGIN_C_OBJS += \
 	$(patsubst $(brpc_plugin_srcdir)/%.c,$(brpc_plugin_srcdir)/%.o,$(wildcard $(brpc_plugin_srcdir)/*.c))
 
-REMOTE_CONNECTION_DEF_DIR = $(falcon_srcdir)/../../../../remote_connection_def
+REMOTE_CONNECTION_DEF_DIR = $(falcon_srcdir)/../remote_connection_def
 BRPC_COMM_ADAPTER = $(falcon_srcdir)/brpc_comm_adapter
 
 PROTO_DIR = $(shell find $(REMOTE_CONNECTION_DEF_DIR) -type d | grep -E '/proto$$')
