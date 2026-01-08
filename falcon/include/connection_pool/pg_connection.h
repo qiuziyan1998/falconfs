@@ -13,7 +13,6 @@
 #include <string>
 #include <thread>
 #include <vector>
-// #include "concurrentqueue/blockingconcurrentqueue.h"
 #include <boost/thread/concurrent_queues/sync_queue.hpp>
 #include <flatbuffers/flatbuffers.h>
 #include "falcon_worker_task.h"
@@ -28,7 +27,6 @@ class PGConnection {
     flatbuffers::FlatBufferBuilder flatBufferBuilder;
     SerializedData replyBuilder;
 
-    // moodycamel::BlockingConcurrentQueue<std::shared_ptr<BaseWorkerTask>> m_workerTaskQueue;
     boost::concurrent::sync_queue<std::shared_ptr<BaseWorkerTask>> m_workerTaskQueue;
     std::thread thread;
     PGconn *conn;
