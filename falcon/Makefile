@@ -34,7 +34,7 @@ $(FBS_HEAD): $(FBS_FILE)
 PGFILEDESC = "falcon"
 
 LDFLAGS_PROTO = -Wl,-Bdynamic -lprotobuf
-LDFLAGS_DEPENDENCIES = -L../../../../falcon/third_party/glog/lib -lpthread -lgflags -lleveldb -lcrypto -lssl -ldl -lz -lglog
+LDFLAGS_DEPENDENCIES = -L../../../../falcon/third_party/glog/lib -lpthread -lgflags -lleveldb -lcrypto -lssl -ldl -lz -lglog -lboost_system -lboost_thread
 
 PG_CPPFLAGS = -Wno-deprecated-declarations -I$(libpq_srcdir) -I./include -I./connection_pool/proto -I./connection_pool/fbs \
 			  -I$(REMOTE_CONNECTION_DEF_DIR) \
@@ -42,7 +42,7 @@ PG_CPPFLAGS = -Wno-deprecated-declarations -I$(libpq_srcdir) -I./include -I./con
 			  -I$(falcon_srcdir)/../falcon/third_party/glog/include \
 			  -I$(falcon_srcdir)/../third_party
 SHLIB_LINK_INTERNAL =  -L../../src/interfaces/libpq -Wl,--no-as-needed -lpq -lstdc++ \
-					-lz -Wl,--as-needed -lboost_system -lboost_thread
+					-lz -Wl,--as-needed
 ifneq ($(strip $(FALCONFS_INSTALL_DIR)),)
 SHLIB_LINK_INTERNAL += -L$(FALCONFS_INSTALL_DIR)/lib -L$(FALCONFS_INSTALL_DIR)/lib64
 endif

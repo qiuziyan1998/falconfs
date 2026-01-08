@@ -14,12 +14,11 @@
 #include <unordered_set>
 #include <vector>
 #include "base_comm_adapter/base_meta_service_job.h"
-#include "concurrentqueue/concurrentqueue.h"
 #include "connection_pool/connection_pool_config.h"
 #include "connection_pool/falcon_batch_service_def.h"
 #include "connection_pool/falcon_worker_task.h"
 #include "connection_pool/pg_connection.h"
-#include "connection_pool/queue.hpp"
+#include "connection_pool/falcon_concurrent_queue.hpp"
 
 class PGConnectionPool {
   private:
@@ -38,7 +37,7 @@ class PGConnectionPool {
 
     class TaskSupportBatch {
       public:
-        fast_queue::SingleConsumerQueue<BaseMetaServiceJob *> jobList;
+        pg_connection_pool::ConcurrentQueue<BaseMetaServiceJob *> jobList;
         std::mutex taskMutex;
         std::condition_variable cvBatchNotFull;
     };
@@ -88,10 +87,6 @@ class PGConnectionPool {
 
 void PGConnectionPool::BackgroundPoolManager()
 {
-    for (int i = 0; i <= (int)FalconBatchServiceType::NOT_SUPPORT; ++i) {
-        supportBatchTaskList[i].jobList.setConsumer(std::this_thread::get_id());
-    }
-
     int waitTime = 100; // microseconds
     while (working) {
         if (!working)
