@@ -27,15 +27,13 @@ include_directories(
 add_executable(test_falcon main.cc workloads.cc falconfs.cc)
 
 target_link_libraries(test_falcon
-    FalconClient
     FalconStore
-    pthread
-    pq
-    fuse
+    FalconClient
     zookeeper_mt
     glog
     jsoncpp
+    gtest
+    pq
     ${BRPC_LIBRARIES}
     ${DYNAMIC_LIB}
-    dl
 )

@@ -8,6 +8,12 @@ ENV TZ=Asia/Shanghai \
     LC_ALL=en_US.UTF-8
 
 RUN apt-get install -y vim fuse gdb pstack
+RUN apt-get install -y tar net-tools curl python3
+
+RUN apt-get -y update
+RUN apt-get install -y iputils-ping fio iperf3
+RUN apt-get install -y openssh-server sshpass
+RUN apt-get install -y net-tools bc sudo
 
 RUN mkdir /opt/log && mkdir /opt/falcon/ && mkdir /opt/conf/ && mkdir /mnt/falcon/
 COPY config.json /opt/conf/

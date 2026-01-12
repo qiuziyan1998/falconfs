@@ -52,6 +52,8 @@ build_pg() {
     if [[ "$BLD_OPT" == "debug" ]]; then
         CONFIGURE_OPTS+=(--enable-debug)
         PG_CFLAGS="-ggdb -O0 -g3 -Wall -fno-omit-frame-pointer"
+    else
+        PG_CFLAGS="-O2"
     fi
 
     # enter source directory
@@ -87,6 +89,8 @@ build_falconfs() {
     if [[ "$BUILD_TYPE" == "Debug" ]]; then
         CONFIGURE_OPTS+=(--enable-debug)
         PG_CFLAGS="-ggdb -O0 -g3 -Wall -fno-omit-frame-pointer"
+    else
+        PG_CFLAGS="-O2"
     fi
     echo "Building FalconFS Meta (mode: $BUILD_TYPE)..."
     cd $FALCONFS_DIR/falcon
@@ -153,7 +157,7 @@ install_falcon_meta() {
     # install brpc communication plugin.
     # later when HCom plugin is provided, need to modify here to choose different communication plugins through configuration
     echo "copy brpc communication plugin to $PG_INSTALL_DIR/lib/postgresql..."
-    cp "$FALCONFS_DIR/falcon/libbrpcplugin.so" "$PG_INSTALL_DIR/lib/postgresql/"
+    cp "$POSTGRES_SRC_DIR/contrib/falcon/libbrpcplugin.so" "$PG_INSTALL_DIR/lib/postgresql/"
     echo "brpc communication plugin copied."
 }
 
@@ -335,7 +339,7 @@ build)
         build_falconfs
         ;;
     *)
-        build_pg "${@:2}" && build_falconfs
+        build_pg "${@:2}" && install_pg && build_falconfs
         ;;
     esac
     ;;
