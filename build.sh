@@ -52,6 +52,8 @@ build_pg() {
     if [[ "$BLD_OPT" == "debug" ]]; then
         CONFIGURE_OPTS+=(--enable-debug)
         PG_CFLAGS="-ggdb -O0 -g3 -Wall -fno-omit-frame-pointer"
+    else
+        PG_CFLAGS="-O2"
     fi
 
     # enter source directory
@@ -87,6 +89,8 @@ build_falconfs() {
     if [[ "$BUILD_TYPE" == "Debug" ]]; then
         CONFIGURE_OPTS+=(--enable-debug)
         PG_CFLAGS="-ggdb -O0 -g3 -Wall -fno-omit-frame-pointer"
+    else
+        PG_CFLAGS="-O2"
     fi
     echo "Building FalconFS Meta (mode: $BUILD_TYPE)..."
     cd $FALCONFS_DIR/falcon
@@ -335,7 +339,7 @@ build)
         build_falconfs
         ;;
     *)
-        build_pg "${@:2}" && build_falconfs
+        build_pg "${@:2}" && install_pg && build_falconfs
         ;;
     esac
     ;;
