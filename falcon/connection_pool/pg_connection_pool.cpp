@@ -18,7 +18,7 @@
 #include "connection_pool/falcon_batch_service_def.h"
 #include "connection_pool/falcon_worker_task.h"
 #include "connection_pool/pg_connection.h"
-#include "connection_pool/falcon_concurrent_queue.hpp"
+#include "connection_pool/falcon_concurrent_queue.h"
 
 class PGConnectionPool {
   private:

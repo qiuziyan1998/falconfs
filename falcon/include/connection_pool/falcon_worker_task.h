@@ -8,7 +8,7 @@
 #include <flatbuffers/flatbuffers.h>
 #include <vector>
 #include "base_comm_adapter/base_meta_service_job.h"
-#include "connection_pool/falcon_concurrent_queue.hpp"
+#include "connection_pool/falcon_concurrent_queue.h"
 #include "libpq-fe.h"
 #include "remote_connection_utils/serialized_data.h"
 #include "utils/falcon_shmem_allocator.h"

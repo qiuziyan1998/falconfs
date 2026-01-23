@@ -52,20 +52,14 @@ protected:
     >;
 
     struct ProducerInfo {
-        std::unique_ptr<LocalQueue> queue;
+        LocalQueue queue;
         std::atomic<size_t> approx_size{0};
         std::atomic<bool> active{true};
 
-        ProducerInfo(size_t size) : queue(std::make_unique<LocalQueue>(size)) {}
+        ProducerInfo(size_t size) : queue(size) {}
 
         bool is_empty() const {
-            if (approx_size.load(std::memory_order_acquire) == 0) {
-                return true;
-            }
-            if (!queue) {
-                return false;
-            }
-            return queue->empty();
+            return queue.empty();
         }
     };
 
@@ -261,7 +255,7 @@ private:
         auto producer_info = get_or_create_producer_info();
         if (!producer_info) return false;
 
-        if (producer_info->queue->push(value)) {
+        if (producer_info->queue.push(value)) {
             producer_info->approx_size.fetch_add(1, std::memory_order_relaxed);
 
             if constexpr (Traits::ENABLE_STATS) {
@@ -277,7 +271,7 @@ private:
         auto producer_info = get_or_create_producer_info();
         if (!producer_info) return false;
 
-        if (producer_info->queue->push(std::move(value))) {
+        if (producer_info->queue.push(std::move(value))) {
             producer_info->approx_size.fetch_add(1, std::memory_order_relaxed);
 
             if constexpr (Traits::ENABLE_STATS) {
@@ -296,7 +290,7 @@ private:
 
         size_t success_count = 0;
         for (size_t i = 0; i < count; ++i) {
-            if (producer_info->queue->push(*first++)) {
+            if (producer_info->queue.push(*first++)) {
                 success_count++;
             } else {
                 break;
@@ -327,7 +321,7 @@ private:
             auto producer = active_producers_[idx];
 
             if (producer) {
-                if (producer->queue->pop(value)) {
+                if (producer->queue.pop(value)) {
                     producer->approx_size.fetch_sub(1, std::memory_order_relaxed);
                     if (producer->approx_size == 0) {
                         if (!producer->active) {
@@ -365,7 +359,7 @@ private:
                 size_t stolen = 0;
                 // dequeue each producer queue
                 for (size_t j = 0; j < max_count - total_stolen; ++j) {
-                    if (producer->queue->consume_one(func)) {
+                    if (producer->queue.consume_one(func)) {
                         stolen++;
                     } else {
                         break;
@@ -442,7 +436,7 @@ private:
 
         for (auto& pair : producer_map_) {
             T value;
-            while (pair.second->queue->pop(value)) {}
+            while (pair.second->queue.pop(value)) {}
             pair.second->approx_size.store(0, std::memory_order_relaxed);
         }
 

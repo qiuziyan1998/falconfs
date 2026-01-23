@@ -8,7 +8,7 @@
 #include <chrono>
 #include <future>
 #include <iostream>
-#include "connection_pool/falcon_concurrent_queue.hpp"
+#include "connection_pool/falcon_concurrent_queue.h"
 
 using namespace pg_connection_pool;
 
