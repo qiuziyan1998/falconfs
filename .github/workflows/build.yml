@@ -20,15 +20,21 @@ jobs:
         apt update
         apt install -y git
 
-    - name: Checkout with custom script
+    - name: Checkout submodules
       run: |
         git config --global --add safe.directory /__w/falconfs/falconfs
         rm -rf third_party/concurrentqueue || true
+        rm -rf third_party/postgres || true
         git rm --cached third_party/concurrentqueue || true
         if [ -f .gitmodules ] && [ -s .gitmodules ]; then
           git submodule sync
           git submodule update --init --recursive --depth=1
         fi
+
+    - name: Check out the repository
+      uses: actions/checkout@v4
+      with:
+        submodules: false
 
     - name: Add non-root user
       run: |
